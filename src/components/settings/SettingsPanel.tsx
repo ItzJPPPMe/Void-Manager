@@ -612,9 +612,6 @@ export function SettingsPanel() {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-slate-500">
-                Tema: FrekansLoL v3.0.0 — Dark Mode / Neon vurgulu modern minimalist.
-              </p>
             </div>
           )}
         </div>
