@@ -5,6 +5,14 @@
   "description": "League of Legends custom skin & mod manager built with Tauri 2 and React",
   "license": "MIT",
   "author": "VOID",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ItzJPPPMe/Void-Menager.git"
+  },
+  "homepage": "https://github.com/ItzJPPPMe/Void-Menager#readme",
+  "bugs": {
+    "url": "https://github.com/ItzJPPPMe/Void-Menager/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
