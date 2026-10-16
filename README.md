@@ -191,7 +191,6 @@ npm run build
 cd src-tauri && cargo test
 ```
 
-Kod stili: mevcut yapıya ve isimlendirmeye uy; kaynak dosyalara yorum satırı ekleme.
 
 ---
 
