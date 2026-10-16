@@ -22,7 +22,7 @@ Akış:
    ```
    ltk://install?url=<https-url>&name=<kostüm-adı>&source=VOID
    ```
-4. **Kurulum** — LTK Manager paketi indirir, kütüphanesine ekler ve **etkinleştirir**.
+4. **Kurulum** — LTK Manager paketi indirir ve kütüphanesine ekler. Modun oyunda görünmesi için LTK profilinde etkin olması gerekir; etkin/pasif durumunu VOID'un **Modlar** ekranından izleyebilirsin.
 5. **Uygulama** — LTK patcher'ı oyun açılırken overlay'i enjekte eder. Oyunu normal şekilde (Riot Client üzerinden) başlatman yeterlidir.
 
 ---
@@ -30,6 +30,9 @@ Akış:
 ## Özellikler
 
 - Birden fazla topluluk kaynağından hibrit katalog taraması, çakışmalarda ağırlığa göre çözümleme.
+- İki ayrı menü: **Kostümler** (katalogdan kostüm seç ve gönder) ve **Modlar** (LTK kütüphanesini yönet).
+- **Modlar** ekranı: LTK kütüphanesindeki yüklü modları ad, sürüm, yazar ve şampiyon bilgisiyle listeler; yerel `.fantome` / `.modpkg` / `.zip` paketlerini tek tuşla LTK'ya aktarır.
+- **Patcher yönetimi**: VOID üzerinden LTK'yı Windows açılışında başlatma ve sessiz mod (tepside çalış + patcher'ı otomatik başlat) tek anahtarla ayarlanır.
 - Şampiyon ve kostüm arama, favoriler, kaynak / hazır durumuna göre filtreleme.
 - Çalışan oyundan yerel (LCU) veri kaynağı; LCU yoksa otomatik olarak çevrimiçi (CommunityDragon) kaynağa düşer.
 - Görsel önbelleği (disk / bellek), TTL ayarı ve tek tuşla temizleme.
@@ -61,17 +64,16 @@ Akış:
 
 ### İlk kurulumdan sonra
 
-Kostümlerin oyunda görünmesi için LTK Manager'ın patcher'ının çalışıyor olması gerekir. Bir kez ayarla, bir daha uğraşma:
+Kostümlerin oyunda görünmesi için LTK Manager'ın patcher'ının çalışıyor olması gerekir. VOID bunu senin yerine ayarlayabilir: **Modlar** ekranındaki *Patcher Kontrolü* kartından iki anahtarı aç.
 
-**LTK Manager → Settings → Startup and tray**
-
-| Ayar | Açıklama |
+| Anahtar | Ne yapar |
 | --- | --- |
-| **Auto run** | LTK bilgisayar açılışında kendiliğinden başlar. |
-| **Start in tray** | Başlarken pencere açılmaz, tepside bekler. |
-| **Always start the patcher** | Her açılışta son etkin profili ve patcher'ı başlatır. |
+| **Windows açılışında başlat** | LTK'yı Windows başlangıcına kaydeder (kullanıcı `Run` anahtarı), bilgisayar açıldığında patcher hazır olur. |
+| **Sessiz mod** | LTK ayarlarında *Start in tray* + *Always start the patcher* seçeneklerini açar; pencere açılmadan tepside çalışır. |
 
-Bu üçü açıkken: bilgisayarı aç, LTK arka planda hazır olsun, oyunu Riot Client'ten başlat. VOID'un durum çubuğundaki `Patcher çalışıyor` rozeti bunu doğrular.
+Bu ikisi açıkken: bilgisayarı aç, LTK arka planda hazır olsun, oyunu Riot Client'ten başlat. VOID'un durum çubuğundaki `Patcher çalışıyor` rozeti bunu doğrular.
+
+Aynı ayarları LTK Manager içinden de yapabilirsin: **LTK Manager → Settings → Startup and tray** (Auto run / Start in tray / Always start the patcher).
 
 ---
 
@@ -128,6 +130,7 @@ Hibrit mod açıkken tüm etkin kaynaklar birleştirilir; aynı kostüm birden f
 │   │   ├── champion/         # şampiyon listesi ve arama
 │   │   ├── common/           # ortak (toast, ikon, modal) bileşenler
 │   │   ├── layout/           # başlık, durum çubuğu
+│   │   ├── mods/             # Modlar ekranı (LTK kütüphanesi + patcher kontrolü)
 │   │   ├── panel/            # seçili kostüm paneli
 │   │   ├── settings/         # ayarlar ekranı
 │   │   └── skins/            # kostüm kartları
@@ -148,6 +151,7 @@ Rust tarafındaki ana komutlar (`src-tauri/src/lib.rs`):
 | `lcu_status`, `fetch_text`, `fetch_text_cached` | Ağ ve yerel oyun verisi |
 | `download_to_cache`, `cache_resolve`, `clear_image_cache` | Görsel önbelleği |
 | `ltk_manager_status`, `ltk_install`, `ltk_open`, `ltk_import_file` | LTK Manager entegrasyonu |
+| `ltk_library`, `ltk_patcher_config`, `ltk_set_autostart`, `ltk_set_patcher_flags`, `ltk_launch` | LTK kütüphanesi ve patcher yönetimi |
 | `extract_mod_package`, `apply_mod`, `revert_last_patch` | Paket inceleme ve yedekleme |
 
 ---

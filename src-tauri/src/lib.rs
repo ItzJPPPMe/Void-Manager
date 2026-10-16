@@ -599,6 +599,308 @@ async fn ltk_import_file(path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+fn ltk_data_dir() -> Option<PathBuf> {
+    let appdata = std::env::var_os("APPDATA")?;
+    Some(PathBuf::from(appdata).join("dev.leaguetoolkit.manager"))
+}
+
+fn ltk_settings_path() -> Option<PathBuf> {
+    Some(ltk_data_dir()?.join("settings.json"))
+}
+
+fn title_case_slug(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut boundary = true;
+    for ch in value.chars() {
+        if ch == '-' || ch == '_' {
+            out.push(' ');
+            boundary = true;
+            continue;
+        }
+        if boundary {
+            out.extend(ch.to_uppercase());
+            boundary = false;
+        } else {
+            out.push(ch);
+        }
+    }
+    out.trim().to_string()
+}
+
+fn read_mod_config(dir: &Path) -> Option<serde_json::Value> {
+    let raw = fs::read_to_string(dir.join("mod.config.json")).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn json_str_array(value: Option<&serde_json::Value>) -> Vec<String> {
+    value
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LtkMod {
+    pub id: String,
+    pub name: String,
+    pub version: Option<String>,
+    pub authors: Vec<String>,
+    pub description: Option<String>,
+    pub champions: Vec<String>,
+    pub format: Option<String>,
+    pub enabled: bool,
+    pub installed_at: Option<String>,
+    pub folder: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LtkLibrary {
+    pub mods: Vec<LtkMod>,
+    pub active_profile: Option<String>,
+    pub profiles: Vec<String>,
+    pub dir: Option<String>,
+}
+
+#[tauri::command]
+async fn ltk_library() -> Result<LtkLibrary, String> {
+    let base = ltk_data_dir().ok_or_else(|| "APPDATA bulunamadı".to_string())?;
+    let raw = fs::read_to_string(base.join("library.json")).map_err(|_| {
+        "LTK kütüphanesi okunamadı. LTK Manager'ı bir kez çalıştırıp tekrar deneyin.".to_string()
+    })?;
+    let json: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("kütüphane çözümlenemedi: {e}"))?;
+    let mut library = build_library(&json, &base.join("mods"));
+    library.dir = Some(base.to_string_lossy().to_string());
+    Ok(library)
+}
+
+fn build_library(json: &serde_json::Value, mods_dir: &Path) -> LtkLibrary {
+    let active_profile_id = json
+        .get("activeProfileId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let mut enabled: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut profiles: Vec<String> = Vec::new();
+    let mut active_profile: Option<String> = None;
+    if let Some(list) = json.get("profiles").and_then(|v| v.as_array()) {
+        for profile in list {
+            let id = profile.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+            let name = profile.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if !name.is_empty() {
+                profiles.push(name.to_string());
+            }
+            if Some(id) == active_profile_id.as_deref() {
+                active_profile = Some(name.to_string());
+                for mod_id in json_str_array(profile.get("enabledMods")) {
+                    enabled.insert(mod_id);
+                }
+            }
+        }
+    }
+    if active_profile.is_none() {
+        active_profile = profiles.first().cloned();
+    }
+
+    let mut folder_of: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    if let Some(list) = json.get("folders").and_then(|v| v.as_array()) {
+        for folder in list {
+            let name = folder.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if name.is_empty() {
+                continue;
+            }
+            for mod_id in json_str_array(folder.get("modIds")) {
+                folder_of.insert(mod_id, name.to_string());
+            }
+        }
+    }
+
+    let mut mods: Vec<LtkMod> = Vec::new();
+    if let Some(list) = json.get("mods").and_then(|v| v.as_array()) {
+        for entry in list {
+            let id = entry.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+            if id.is_empty() {
+                continue;
+            }
+            let slug = entry.get("slug").and_then(|v| v.as_str());
+            let config = read_mod_config(&mods_dir.join(slug.unwrap_or(id)))
+                .or_else(|| read_mod_config(&mods_dir.join(id)));
+
+            let display = config
+                .as_ref()
+                .and_then(|c| c.get("display_name").and_then(|v| v.as_str()))
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .or_else(|| slug.map(title_case_slug))
+                .unwrap_or_else(|| id.to_string());
+
+            let version = config
+                .as_ref()
+                .and_then(|c| c.get("version").and_then(|v| v.as_str()))
+                .map(String::from);
+            let description = config
+                .as_ref()
+                .and_then(|c| c.get("description").and_then(|v| v.as_str()))
+                .filter(|s| !s.is_empty())
+                .map(String::from);
+
+            mods.push(LtkMod {
+                id: id.to_string(),
+                name: display,
+                version,
+                authors: json_str_array(config.as_ref().and_then(|c| c.get("authors"))),
+                description,
+                champions: json_str_array(config.as_ref().and_then(|c| c.get("champions"))),
+                format: entry
+                    .get("format")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                enabled: enabled.contains(id),
+                installed_at: entry
+                    .get("installedAt")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                folder: folder_of.get(id).cloned(),
+            });
+        }
+    }
+
+    mods.sort_by(|a, b| {
+        b.enabled
+            .cmp(&a.enabled)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    LtkLibrary {
+        mods,
+        active_profile,
+        profiles,
+        dir: None,
+    }
+}
+
+fn autostart_registered() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("reg")
+            .args([
+                "query",
+                "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                "/v",
+                "VOID-LTK-Patcher",
+            ])
+            .output();
+        return output.map(|o| o.status.success()).unwrap_or(false);
+    }
+    #[cfg(not(target_os = "windows"))]
+    false
+}
+
+fn patcher_config() -> LtkPatcherConfig {
+    let json = ltk_settings_path()
+        .and_then(|p| fs::read_to_string(p).ok())
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+    let flag = |key: &str| {
+        json.as_ref()
+            .and_then(|j| j.get(key))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    };
+    LtkPatcherConfig {
+        installed: ltk_manager_exe().is_some(),
+        always_start_patcher: flag("alwaysStartPatcher"),
+        start_in_tray: flag("startInTray"),
+        auto_run: flag("autoRun"),
+        autostart_registered: autostart_registered(),
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LtkPatcherConfig {
+    pub installed: bool,
+    pub always_start_patcher: bool,
+    pub start_in_tray: bool,
+    pub auto_run: bool,
+    pub autostart_registered: bool,
+}
+
+#[tauri::command]
+async fn ltk_patcher_config() -> LtkPatcherConfig {
+    patcher_config()
+}
+
+#[tauri::command]
+async fn ltk_set_autostart(enabled: bool) -> Result<LtkPatcherConfig, String> {
+    let exe = ltk_manager_exe()
+        .ok_or_else(|| "LTK Manager kurulu değil, otomatik başlatma kurulamaz.".to_string())?;
+    let run_key = "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    let output = if enabled {
+        std::process::Command::new("reg")
+            .args([
+                "add",
+                run_key,
+                "/v",
+                "VOID-LTK-Patcher",
+                "/t",
+                "REG_SZ",
+                "/d",
+                &format!("\"{}\"", exe.to_string_lossy()),
+                "/f",
+            ])
+            .output()
+    } else {
+        std::process::Command::new("reg")
+            .args([
+                "delete",
+                run_key,
+                "/v",
+                "VOID-LTK-Patcher",
+                "/f",
+            ])
+            .output()
+    }
+    .map_err(|e| format!("kayıt defteri güncellenemedi: {e}"))?;
+    if !output.status.success() && enabled {
+        return Err("otomatik başlatma kaydedilemedi".into());
+    }
+    Ok(patcher_config())
+}
+
+#[tauri::command]
+async fn ltk_set_patcher_flags(enabled: bool) -> Result<LtkPatcherConfig, String> {
+    let path = ltk_settings_path()
+        .ok_or_else(|| "LTK ayar dosyası bulunamadı".to_string())?;
+    let raw = fs::read_to_string(&path)
+        .map_err(|_| "LTK ayarları okunamadı. LTK Manager'ı bir kez çalıştırın.".to_string())?;
+    let mut json: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("ayarlar çözümlenemedi: {e}"))?;
+    if let Some(obj) = json.as_object_mut() {
+        obj.insert("alwaysStartPatcher".into(), serde_json::Value::Bool(enabled));
+        obj.insert("startInTray".into(), serde_json::Value::Bool(enabled));
+    }
+    let text = serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?;
+    fs::write(&path, text).map_err(|e| format!("ayarlar yazılamadı: {e}"))?;
+    Ok(patcher_config())
+}
+
+#[tauri::command]
+async fn ltk_launch() -> Result<(), String> {
+    let exe = ltk_manager_exe()
+        .ok_or_else(|| "LTK Manager kurulu değil. Önce LTK Manager'ı yükleyin.".to_string())?;
+    std::process::Command::new(exe)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("LTK Manager başlatılamadı: {e}"))
+}
+
 #[tauri::command]
 async fn detect_league_path() -> DetectResult {
     detect_league()
@@ -899,6 +1201,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             detect_league_path,
             detect_riot_client_path,
@@ -916,7 +1219,12 @@ pub fn run() {
             ltk_manager_status,
             ltk_install,
             ltk_open,
-            ltk_import_file
+            ltk_import_file,
+            ltk_library,
+            ltk_patcher_config,
+            ltk_set_autostart,
+            ltk_set_patcher_flags,
+            ltk_launch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -924,7 +1232,8 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::pct_encode;
+    use super::{build_library, pct_encode, title_case_slug};
+    use std::path::Path;
 
     fn deep_link(url: &str, name: &str) -> String {
         format!(
@@ -977,5 +1286,62 @@ mod tests {
         let pairs = query_pairs(&deep_link(url, "A&B?C#D"));
         assert_eq!(pairs.get("url").map(String::as_str), Some(url));
         assert_eq!(pairs.get("name").map(String::as_str), Some("A&B?C#D"));
+    }
+
+    #[test]
+    fn slug_baslik_bicimine_cevrilir() {
+        assert_eq!(
+            title_case_slug("guardian-of-the-sands-rengar"),
+            "Guardian Of The Sands Rengar"
+        );
+        assert_eq!(title_case_slug("my_mod"), "My Mod");
+        assert_eq!(title_case_slug(""), "");
+    }
+
+    #[test]
+    fn kutuphane_etkin_modu_ve_profili_cozer() {
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{
+                "version": 2,
+                "mods": [
+                    { "id": "m1", "format": "fantome", "slug": "a-mod", "installedAt": "2026-01-01T00:00:00Z" },
+                    { "id": "m2", "format": "modpkg", "slug": "b-mod", "installedAt": "2026-01-02T00:00:00Z" }
+                ],
+                "profiles": [
+                    { "id": "p1", "name": "Default", "enabledMods": ["m1"] }
+                ],
+                "activeProfileId": "p1",
+                "folders": [ { "id": "root", "name": "", "modIds": ["m1", "m2"] } ],
+                "folderOrder": ["root"]
+            }"#,
+        )
+        .expect("ornek kutuphane cozulemedi");
+
+        let library = build_library(&json, Path::new("C:/yok/boyle/bir/yol"));
+        assert_eq!(library.active_profile.as_deref(), Some("Default"));
+        assert_eq!(library.profiles, vec!["Default"]);
+        assert_eq!(library.mods.len(), 2);
+        assert_eq!(library.mods[0].id, "m1");
+        assert!(library.mods[0].enabled);
+        assert_eq!(library.mods[0].name, "A Mod");
+        assert_eq!(library.mods[1].id, "m2");
+        assert!(!library.mods[1].enabled);
+    }
+
+    #[test]
+    fn etkin_olmayan_profil_bos_kabul_edilir() {
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{
+                "mods": [ { "id": "m1", "slug": "a-mod" } ],
+                "profiles": [ { "id": "p1", "name": "Default", "enabledMods": [] } ],
+                "activeProfileId": "p1"
+            }"#,
+        )
+        .expect("ornek kutuphane cozulemedi");
+
+        let library = build_library(&json, Path::new("C:/yok"));
+        assert_eq!(library.mods.len(), 1);
+        assert!(!library.mods[0].enabled);
+        assert_eq!(library.mods[0].name, "A Mod");
     }
 }

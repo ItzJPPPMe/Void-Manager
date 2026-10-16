@@ -44,6 +44,34 @@ export interface LtkStatus {
   patcherRunning: boolean;
 }
 
+export interface LtkMod {
+  id: string;
+  name: string;
+  version: string | null;
+  authors: string[];
+  description: string | null;
+  champions: string[];
+  format: string | null;
+  enabled: boolean;
+  installedAt: string | null;
+  folder: string | null;
+}
+
+export interface LtkLibrary {
+  mods: LtkMod[];
+  activeProfile: string | null;
+  profiles: string[];
+  dir: string | null;
+}
+
+export interface LtkPatcherConfig {
+  installed: boolean;
+  alwaysStartPatcher: boolean;
+  startInTray: boolean;
+  autoRun: boolean;
+  autostartRegistered: boolean;
+}
+
 export async function detectLeaguePath(): Promise<DetectResult> {
   return invoke<DetectResult>("detect_league_path");
 }
@@ -82,6 +110,28 @@ export async function ltkOpen(): Promise<void> {
 
 export async function ltkImportFile(path: string): Promise<void> {
   return invoke("ltk_import_file", { path });
+}
+
+export async function ltkLibrary(): Promise<LtkLibrary> {
+  return invoke<LtkLibrary>("ltk_library");
+}
+
+export async function ltkPatcherConfig(): Promise<LtkPatcherConfig> {
+  return invoke<LtkPatcherConfig>("ltk_patcher_config");
+}
+
+export async function ltkSetAutostart(enabled: boolean): Promise<LtkPatcherConfig> {
+  return invoke<LtkPatcherConfig>("ltk_set_autostart", { enabled });
+}
+
+export async function ltkSetPatcherFlags(
+  enabled: boolean,
+): Promise<LtkPatcherConfig> {
+  return invoke<LtkPatcherConfig>("ltk_set_patcher_flags", { enabled });
+}
+
+export async function ltkLaunch(): Promise<void> {
+  return invoke("ltk_launch");
 }
 
 export async function fetchText(url: string): Promise<string> {

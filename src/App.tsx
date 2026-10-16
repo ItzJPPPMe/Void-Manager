@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { ChampionWorkspace } from "@/components/champion/ChampionWorkspace";
+import { ModsView } from "@/components/mods/ModsView";
 import { SelectedSkinPanel } from "@/components/panel/SelectedSkinPanel";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { Toast } from "@/components/layout/Toast";
@@ -12,8 +13,10 @@ import { useRepositories } from "@/hooks/useRepositories";
 
 export default function App() {
   const settingsOpen = useAppStore((s) => s.settingsOpen);
+  const view = useAppStore((s) => s.view);
   const setSystemStatus = useAppStore((s) => s.setSystemStatus);
   const refreshLtk = useAppStore((s) => s.refreshLtk);
+  const refreshLibrary = useAppStore((s) => s.refreshLibrary);
   const autoSyncOnLaunch = useSettingsStore((s) => s.settings.autoSyncOnLaunch);
   const lastSyncedAt = useSettingsStore((s) => s.sync.lastSyncedAt);
   const { sync } = useRepositories();
@@ -40,6 +43,10 @@ export default function App() {
   }, [setSystemStatus, refreshLtk]);
 
   useEffect(() => {
+    void refreshLibrary();
+  }, [refreshLibrary]);
+
+  useEffect(() => {
     if (autoSyncOnLaunch && !lastSyncedAt) {
       void sync();
     }
@@ -51,9 +58,9 @@ export default function App() {
       <Sidebar />
       <main className="relative z-10 flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1">
-          <ChampionWorkspace />
+          {view === "mods" ? <ModsView /> : <ChampionWorkspace />}
         </div>
-        <SelectedSkinPanel />
+        {view === "skins" && <SelectedSkinPanel />}
         <StatusBar />
       </main>
       {settingsOpen && <SettingsPanel />}
