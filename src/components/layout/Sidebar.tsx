@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Heart, Search, Settings2, Swords, Layers } from "lucide-react";
+import { Search, Settings2, Swords, Layers } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
 import { useAppStore } from "@/store/appStore";
@@ -153,9 +153,6 @@ export function Sidebar() {
         <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-slate-500">
           <span className="inline-flex items-center gap-1">
             <Layers className="h-3 w-3" /> Kaynak: {champions.length}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Heart className="h-3 w-3" /> FrekansLoL v3 mimarisi
           </span>
         </div>
       </div>
