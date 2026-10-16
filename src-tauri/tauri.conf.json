@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VOID Skin Manager",
+  "version": "1.0.0",
+  "identifier": "com.void.skinmanager",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "VOID — League Skin & Mod Manager",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "decorations": false,
+        "transparent": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**", "$APPLOCALDATA/**", "$HOME/**", "$TEMP/**", "$RESOURCE/**"]
+      },
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https://raw.communitydragon.org https://ddragon.leagueoflegends.com https://cdn.jsdelivr.net data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://raw.communitydragon.org https://ddragon.leagueoflegends.com https://api.github.com https://raw.githubusercontent.com https://cdn.jsdelivr.net"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "category": "Game",
+    "shortDescription": "League of Legends custom skin & mod manager",
+    "publisher": "VOID"
+  },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
+    "http": {
+      "scopeRedirects": true
+    }
+  }
+}
