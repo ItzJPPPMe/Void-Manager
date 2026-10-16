@@ -57,7 +57,7 @@ Akış:
 
 ## Kurulum
 
-[Releases](https://github.com/ItzJPPPMe/Void-Menager/releases/latest) sayfasından `VOID-Skin-Manager-Setup.exe` dosyasını indirip çalıştır. Alternatif olarak `.msi` paketi de yayınlanır.
+[Releases](https://github.com/ItzJPPPMe/Void-Manager/releases/latest) sayfasından `VOID-Skin-Manager-Setup.exe` dosyasını indirip çalıştır. Alternatif olarak `.msi` paketi de yayınlanır.
 
 ### İlk kurulumdan sonra
 
@@ -78,8 +78,8 @@ Bu üçü açıkken: bilgisayarı aç, LTK arka planda hazır olsun, oyunu Riot 
 ## Kaynaktan derleme
 
 ```bash
-git clone https://github.com/ItzJPPPMe/Void-Menager.git
-cd Void-Menager
+git clone https://github.com/ItzJPPPMe/Void-Manager.git
+cd Void-Manager
 npm install
 
 # geliştirme (Vite dev sunucusu + Tauri penceresi)
@@ -179,7 +179,7 @@ Tauri 2, React 18, TypeScript, Zustand, Tailwind CSS, Vite, Rust. İkonlar [Luci
 
 ## Katkı
 
-Hata bildirimi ve öneriler için [Issues](https://github.com/ItzJPPPMe/Void-Menager/issues) bölümünü kullan. Katkı göndermeden önce lütfen şunları çalıştır:
+Hata bildirimi ve öneriler için [Issues](https://github.com/ItzJPPPMe/Void-Manager/issues) bölümünü kullan. Katkı göndermeden önce lütfen şunları çalıştır:
 
 ```bash
 npm run typecheck

@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["VOID"]
 description = "League of Legends custom skin & mod manager built with Tauri 2 and React"
 license = "MIT"
-repository = "https://github.com/ItzJPPPMe/Void-Menager"
+repository = "https://github.com/ItzJPPPMe/Void-Manager"
 
 [lib]
 name = "void_skin_manager_lib"
