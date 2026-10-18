@@ -34,6 +34,17 @@ fn lcu_http() -> &'static reqwest::Client {
     })
 }
 
+fn command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 #[derive(Clone)]
 struct LcuInfo {
     port: u16,
@@ -227,8 +238,7 @@ fn detect_from_metadata(prefix: &str) -> Option<(String, String)> {
 }
 
 fn reg_query(key: &str, value: &str) -> Option<String> {
-    use std::process::Command;
-    let output = Command::new("reg")
+    let output = command("reg")
         .args(["query", key, "/v", value])
         .output()
         .ok()?;
@@ -400,8 +410,7 @@ fn dir_size_mb(path: &Path) -> f64 {
 }
 
 fn reg_default(key: &str) -> Option<String> {
-    use std::process::Command;
-    let output = Command::new("reg")
+    let output = command("reg")
         .args(["query", key, "/ve"])
         .output()
         .ok()?;
@@ -500,7 +509,7 @@ fn process_running(image_name: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
         let filter = format!("IMAGENAME eq {image_name}");
-        let output = std::process::Command::new("tasklist")
+        let output = command("tasklist")
             .args(["/FI", &filter, "/NH", "/FO", "CSV"])
             .output();
         if let Ok(out) = output {
@@ -569,7 +578,7 @@ async fn ltk_install(
     let exe = ltk_manager_exe().ok_or_else(|| {
         "LTK Manager kurulu değil. LTK Manager'ı yükledikten sonra tekrar deneyin.".to_string()
     })?;
-    std::process::Command::new(exe)
+    command(exe)
         .arg(&deep_link)
         .spawn()
         .map(|_| ())
@@ -579,7 +588,7 @@ async fn ltk_install(
 #[tauri::command]
 async fn ltk_open() -> Result<(), String> {
     let exe = ltk_manager_exe().ok_or_else(|| "LTK Manager bulunamadı".to_string())?;
-    std::process::Command::new(exe)
+    command(exe)
         .spawn()
         .map(|_| ())
         .map_err(|e| e.to_string())
@@ -592,7 +601,7 @@ async fn ltk_import_file(path: String) -> Result<(), String> {
         return Err("paket dosyası bulunamadı".into());
     }
     let exe = ltk_manager_exe().ok_or_else(|| "LTK Manager bulunamadı".to_string())?;
-    std::process::Command::new(exe)
+    command(exe)
         .arg(pkg)
         .spawn()
         .map(|_| ())
@@ -789,7 +798,7 @@ fn build_library(json: &serde_json::Value, mods_dir: &Path) -> LtkLibrary {
 fn autostart_registered() -> bool {
     #[cfg(target_os = "windows")]
     {
-        let output = std::process::Command::new("reg")
+        let output = command("reg")
             .args([
                 "query",
                 "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
@@ -843,7 +852,7 @@ async fn ltk_set_autostart(enabled: bool) -> Result<LtkPatcherConfig, String> {
         .ok_or_else(|| "LTK Manager kurulu değil, otomatik başlatma kurulamaz.".to_string())?;
     let run_key = "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
     let output = if enabled {
-        std::process::Command::new("reg")
+        command("reg")
             .args([
                 "add",
                 run_key,
@@ -857,7 +866,7 @@ async fn ltk_set_autostart(enabled: bool) -> Result<LtkPatcherConfig, String> {
             ])
             .output()
     } else {
-        std::process::Command::new("reg")
+        command("reg")
             .args([
                 "delete",
                 run_key,
@@ -895,7 +904,7 @@ async fn ltk_set_patcher_flags(enabled: bool) -> Result<LtkPatcherConfig, String
 async fn ltk_launch() -> Result<(), String> {
     let exe = ltk_manager_exe()
         .ok_or_else(|| "LTK Manager kurulu değil. Önce LTK Manager'ı yükleyin.".to_string())?;
-    std::process::Command::new(exe)
+    command(exe)
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("LTK Manager başlatılamadı: {e}"))
@@ -1077,7 +1086,7 @@ async fn open_folder(path: String) -> Result<(), String> {
     let target = PathBuf::from(&path);
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
+        command("explorer")
             .arg(target)
             .spawn()
             .map_err(|e| e.to_string())?;
