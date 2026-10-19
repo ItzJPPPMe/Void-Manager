@@ -4,6 +4,7 @@ import type {
   CommunityDragonChampionSummary,
   CommunityDragonSkin,
   CommunityDragonSkinsResponse,
+  DdragonChampionFullResponse,
   Skin,
   SkinSourceType,
 } from "@/types/champion";
@@ -23,6 +24,12 @@ const CDRAGON =
   "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default";
 
 const LCU_BASE = "lcu://lol-game-data/assets";
+
+const DDRAGON_API = "https://ddragon.leagueoflegends.com/api/versions.json";
+
+const DDRAGON_CDN = "https://ddragon.leagueoflegends.com/cdn";
+
+const LOCALIZATION_LOCALE = "tr_TR";
 
 const CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -194,6 +201,8 @@ export class SyncService {
       return a.skinNum - b.skinNum;
     });
 
+    await this.localizeTurkish(merged);
+
     const skinCountByChampion = new Map<number, number>();
     for (const s of merged) {
       skinCountByChampion.set(
@@ -217,6 +226,55 @@ export class SyncService {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "")
       .trim();
+  }
+
+  private async localizeTurkish(skins: Skin[]): Promise<void> {
+    try {
+      this.setProgress(
+        "darkseal",
+        "fetching-catalog",
+        0,
+        0,
+        "Türkçe kostüm adları alınıyor...",
+      );
+      const versionsRaw = await fetchTextCached(
+        DDRAGON_API,
+        "localization/ddragon-versions.json",
+        CATALOG_TTL_MS,
+      );
+      const versions = JSON.parse(versionsRaw) as string[];
+      const version = versions[0];
+      if (!version) return;
+
+      const raw = await fetchTextCached(
+        `${DDRAGON_CDN}/${version}/data/${LOCALIZATION_LOCALE}/championFull.json`,
+        `localization/${LOCALIZATION_LOCALE}-${version}-championFull.json`,
+        CATALOG_TTL_MS,
+      );
+      const data = JSON.parse(raw) as DdragonChampionFullResponse;
+      const names = new Map<number, string>();
+      for (const champion of Object.values(data.data ?? {})) {
+        for (const entry of champion.skins ?? []) {
+          const id = Number(entry.id);
+          if (!Number.isFinite(id) || id <= 0) continue;
+          const name = (entry.name ?? "").trim();
+          if (!name || name.toLowerCase() === "default") continue;
+          names.set(id, name);
+        }
+      }
+      if (names.size === 0) return;
+
+      for (const skin of skins) {
+        const localized = names.get(skin.id);
+        if (localized) skin.name = localized;
+        for (const chroma of skin.chromas) {
+          const chromaName = names.get(chroma.id);
+          if (chromaName) chroma.name = chromaName;
+        }
+      }
+    } catch {
+      return;
+    }
   }
 
   private async fetchMasterCatalog(): Promise<{

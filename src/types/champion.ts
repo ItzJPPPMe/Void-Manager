@@ -77,3 +77,21 @@ export interface CommunityDragonChampionSummary {
 export interface CommunityDragonSkinsResponse {
   [skinId: string]: CommunityDragonSkin;
 }
+
+export interface DdragonSkin {
+  id: string;
+  num: number;
+  name: string;
+}
+
+export interface DdragonChampionFullEntry {
+  id: string;
+  key: string;
+  name: string;
+  title: string;
+  skins: DdragonSkin[];
+}
+
+export interface DdragonChampionFullResponse {
+  data: Record<string, DdragonChampionFullEntry>;
+}

@@ -29,6 +29,7 @@ Akış:
 
 ## Özellikler
 
+- **Türkçe kostüm adları**: senkronizasyon sonunda isimler Data Dragon `tr_TR` verisiyle yerelleştirilir; LTK'ya gönderilen mod adı da Türkçe kaydedilir.
 - Birden fazla topluluk kaynağından hibrit katalog taraması, çakışmalarda ağırlığa göre çözümleme.
 - İki ayrı menü: **Kostümler** (katalogdan kostüm seç ve gönder) ve **Modlar** (LTK kütüphanesini yönet).
 - **Modlar** ekranı: LTK kütüphanesindeki yüklü modları ad, sürüm, yazar ve şampiyon bilgisiyle listeler; yerel `.fantome` / `.modpkg` / `.zip` paketlerini tek tuşla LTK'ya aktarır.
