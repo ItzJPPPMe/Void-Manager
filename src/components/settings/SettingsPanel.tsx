@@ -15,7 +15,6 @@ import { useSettingsStore } from "@/store/settingsStore";
 import { useAppStore } from "@/store/appStore";
 import { useRepositories } from "@/hooks/useRepositories";
 import {
-  clearImageCache,
   detectLeaguePath,
   detectRiotClientPath,
   lcuStatus,
@@ -24,7 +23,6 @@ import {
 import { getImageLoader } from "@/services/imageLoader";
 import type {
   DataSourceMode,
-  ImageQuality,
   PatchTargetMode,
   ThemeAccent,
 } from "@/types/settings";
@@ -34,13 +32,6 @@ const ACCENTS: { id: ThemeAccent; label: string; color: string }[] = [
   { id: "violet", label: "Neon Violet", color: "#8b5cf6" },
   { id: "magenta", label: "Neon Magenta", color: "#ff2e88" },
   { id: "lime", label: "Neon Lime", color: "#a3ff12" },
-];
-
-const QUALITIES: { id: ImageQuality; label: string }[] = [
-  { id: "low", label: "Düşük (320px)" },
-  { id: "medium", label: "Orta (640px)" },
-  { id: "high", label: "Yüksek (1280px)" },
-  { id: "ultra", label: "Ultra (2048px)" },
 ];
 
 const PATCH_MODES: { id: PatchTargetMode; label: string; hint: string }[] = [
@@ -77,6 +68,7 @@ export function SettingsPanel() {
   const ltkStatus = useAppStore((s) => s.ltkStatus);
   const refreshLtk = useAppStore((s) => s.refreshLtk);
   const { sync } = useRepositories();
+  const syncRunning = useSettingsStore((s) => s.sync.running);
   const [tab, setTab] = useState<"repos" | "network" | "patch" | "theme">("repos");
   const [lcu, setLcu] = useState<{ running: boolean; port: number | null }>({
     running: false,
@@ -97,26 +89,39 @@ export function SettingsPanel() {
   }, []);
 
   const handleDetect = async () => {
-    const [league, riot] = await Promise.all([
-      detectLeaguePath(),
-      detectRiotClientPath(),
-    ]);
-    update({
-      leaguePath: league.path,
-      riotClientPath: riot.path,
-    });
-    showToast(
-      league.found
-        ? `League bulundu: ${league.path}`
-        : "League of Legends kurulumu bulunamadı",
-      league.found ? "success" : "error",
-    );
+    try {
+      const [league, riot] = await Promise.all([
+        detectLeaguePath(),
+        detectRiotClientPath(),
+      ]);
+      update({
+        leaguePath: league.path,
+        riotClientPath: riot.path,
+      });
+      showToast(
+        league.found
+          ? `League bulundu: ${league.path}`
+          : "League of Legends kurulumu bulunamadı",
+        league.found ? "success" : "error",
+      );
+    } catch (err) {
+      showToast(
+        typeof err === "string" ? err : "Kurulumlar tarama başarısız oldu",
+        "error",
+      );
+    }
   };
 
   const handleClearCache = async () => {
-    const mb = await clearImageCache();
-    getImageLoader().configure({ ttlHours: settings.imageCacheTtlHours });
-    showToast(`${mb} MB önbellek temizlendi`, "success");
+    try {
+      const mb = await getImageLoader().clearCache();
+      showToast(`${mb.toFixed(1)} MB önbellek temizlendi`, "success");
+    } catch (err) {
+      showToast(
+        typeof err === "string" ? err : "Önbellek temizlenemedi",
+        "error",
+      );
+    }
   };
 
   const handleOpenLtk = async () => {
@@ -124,7 +129,11 @@ export function SettingsPanel() {
       await ltkOpen();
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : "LTK Manager açılamadı",
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+            ? err.message
+            : "LTK Manager açılamadı",
         "error",
       );
     }
@@ -261,12 +270,16 @@ export function SettingsPanel() {
                 </p>
                 <button
                   onClick={() => {
+                    if (syncRunning) return;
                     void sync();
                     showToast("Senkronizasyon başlatıldı", "info");
                   }}
-                  className="btn-primary"
+                  disabled={syncRunning}
+                  className={clsx("btn-primary", syncRunning && "opacity-50")}
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  <RefreshCw
+                    className={clsx("h-4 w-4", syncRunning && "animate-spin")}
+                  />
                   Şimdi Senkronize Et
                 </button>
               </div>
@@ -348,7 +361,8 @@ export function SettingsPanel() {
                 <div>
                   <p className="text-sm font-medium">Disk önbelleği</p>
                   <p className="text-xs text-slate-400">
-                    Görseller .cache/images altına kaydedilir, tekrar indirilmez.
+                    Kapalıyken görseller önbellekten kullanılmaz ve her
+                    seferinde yeniden indirilir.
                   </p>
                 </div>
                 <input
@@ -372,34 +386,13 @@ export function SettingsPanel() {
                   max={720}
                   step={24}
                   value={settings.imageCacheTtlHours}
-                  onChange={(e) =>
-                    update({ imageCacheTtlHours: Number(e.target.value) })
-                  }
+                  onChange={(e) => {
+                    const ttlHours = Number(e.target.value);
+                    update({ imageCacheTtlHours: ttlHours });
+                    getImageLoader().configure({ ttlHours });
+                  }}
                   className="w-full accent-cyan-400"
                 />
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs text-slate-400">Görsel kalitesi</p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {QUALITIES.map((q) => (
-                    <button
-                      key={q.id}
-                      onClick={() => {
-                        update({ imageQuality: q.id });
-                        getImageLoader().configure({ quality: q.id });
-                      }}
-                      className={clsx(
-                        "rounded-lg border px-3 py-2 text-xs font-semibold transition",
-                        settings.imageQuality === q.id
-                          ? "border-neon-cyan/50 bg-neon-cyan/15 text-neon-cyan"
-                          : "border-white/10 bg-white/[0.02] text-slate-400 hover:border-white/25",
-                      )}
-                    >
-                      {q.label}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <button onClick={() => void handleClearCache()} className="btn-ghost">

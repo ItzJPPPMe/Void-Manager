@@ -48,7 +48,12 @@ export function LazyImage({
   }, [eager, visible]);
 
   useEffect(() => {
-    if (!visible || !url) return;
+    if (!visible) return;
+    if (!url) {
+      setSrc(null);
+      setStatus("idle");
+      return;
+    }
     let alive = true;
     setStatus("loading");
     getImageLoader()
@@ -88,6 +93,7 @@ export function LazyImage({
           )}
           style={objectPosition ? { objectPosition } : undefined}
           onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("error")}
         />
       ) : status === "error" ? (
         <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-void-700 to-void-900 text-slate-600">

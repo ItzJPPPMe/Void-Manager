@@ -4,15 +4,9 @@ import {
   downloadToCache,
   toAssetUrl,
 } from "./ltkManager";
+import { useSettingsStore } from "@/store/settingsStore";
 
 const CACHE_ROOT = "images";
-
-const QUALITY_SUFFIX: Record<string, string> = {
-  low: "",
-  medium: "",
-  high: "",
-  ultra: "",
-};
 
 function djb2(input: string): string {
   let hash = 5381;
@@ -35,7 +29,6 @@ function cacheKeyFor(url: string): string {
 
 export interface ImageLoaderOptions {
   enabled?: boolean;
-  quality?: string;
   ttlHours?: number;
 }
 
@@ -46,14 +39,22 @@ export class ImageLoader {
   private active = 0;
   private maxConcurrent = 10;
   private enabled = true;
+  private ttlHours = 336;
   private static readonly MAX_ENTRIES = 4000;
 
   constructor(opts: ImageLoaderOptions) {
-    this.enabled = opts.enabled ?? true;
+    this.configure(opts);
   }
 
   configure(opts: ImageLoaderOptions): void {
     if (opts.enabled !== undefined) this.enabled = opts.enabled;
+    if (opts.ttlHours !== undefined && Number.isFinite(opts.ttlHours)) {
+      this.ttlHours = Math.max(1, opts.ttlHours);
+    }
+  }
+
+  private ttlMs(): number {
+    return Math.round(this.ttlHours * 60 * 60 * 1000);
   }
 
   private pump(): void {
@@ -92,15 +93,16 @@ export class ImageLoader {
 
     const task = this.schedule(async () => {
       try {
+        const ttlMs = this.ttlMs();
         if (this.enabled) {
-          const existing = await cacheResolve(key);
+          const existing = await cacheResolve(key, ttlMs);
           if (existing) {
             const asset = toAssetUrl(existing);
             this.remember(url, asset);
             return asset;
           }
         }
-        const full = await downloadToCache(url, key);
+        const full = await downloadToCache(url, key, ttlMs, this.enabled);
         const asset = toAssetUrl(full);
         this.remember(url, asset);
         return asset;
@@ -127,11 +129,7 @@ export class ImageLoader {
 
   async clearCache(): Promise<number> {
     this.urlMap.clear();
-    try {
-      return await clearImageCache();
-    } catch {
-      return 0;
-    }
+    return clearImageCache();
   }
 }
 
@@ -139,7 +137,11 @@ let singleton: ImageLoader | null = null;
 
 export function getImageLoader(): ImageLoader {
   if (!singleton) {
-    singleton = new ImageLoader({ enabled: true, quality: QUALITY_SUFFIX.high });
+    const settings = useSettingsStore.getState().settings;
+    singleton = new ImageLoader({
+      enabled: settings.imageCacheEnabled,
+      ttlHours: settings.imageCacheTtlHours,
+    });
   }
   return singleton;
 }

@@ -103,7 +103,7 @@ function ModCard({ mod }: { mod: LtkMod }) {
             {mod.authors.join(", ")}
           </span>
         )}
-        {mod.champions.slice(0, 2).map((champ) => (
+        {Array.from(new Set(mod.champions)).slice(0, 2).map((champ) => (
           <span
             key={champ}
             className="inline-flex items-center gap-1 rounded-md bg-neon-cyan/10 px-2 py-0.5 text-[10px] text-neon-cyan"
@@ -133,14 +133,14 @@ export function ModsView() {
 
   const mods = useMemo(() => {
     const list = library?.mods ?? [];
-    const q = query.trim().toLowerCase();
+    const q = query.trim().toLocaleLowerCase("tr-TR");
     if (!q) return list;
     return list.filter(
       (m) =>
-        m.name.toLowerCase().includes(q) ||
-        (m.description?.toLowerCase().includes(q) ?? false) ||
-        m.authors.some((a) => a.toLowerCase().includes(q)) ||
-        m.champions.some((c) => c.toLowerCase().includes(q)),
+        m.name.toLocaleLowerCase("tr-TR").includes(q) ||
+        (m.description?.toLocaleLowerCase("tr-TR").includes(q) ?? false) ||
+        m.authors.some((a) => a.toLocaleLowerCase("tr-TR").includes(q)) ||
+        m.champions.some((c) => c.toLocaleLowerCase("tr-TR").includes(q)),
     );
   }, [library, query]);
 

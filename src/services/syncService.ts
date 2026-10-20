@@ -33,6 +33,12 @@ const LOCALIZATION_LOCALE = "tr_TR";
 
 const CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
 
+const CHAMPION_KEY_ALIASES: Record<string, string> = {
+  monkeyking: "wukong",
+  nunu: "nunuwillump",
+  renata: "renataglasc",
+};
+
 function encodeRepoPath(path: string): string {
   return path
     .replace(/\\/g, "/")
@@ -69,6 +75,7 @@ export interface SyncResult {
   skins: Skin[];
   champions: ChampionSummary[];
   source: CatalogSource;
+  errors: string[];
 }
 
 export class SyncService {
@@ -77,6 +84,7 @@ export class SyncService {
   private progress: SyncProgress[] = [];
   private dataSource: DataSourceMode;
   private assetBase = CDRAGON;
+  private packageRank = new Map<string, number>();
 
   constructor(settings: AppSettings) {
     this.repositories = DEFAULT_REPOSITORIES.map((repo) => ({
@@ -105,7 +113,7 @@ export class SyncService {
   }
 
   private setProgress(
-    repositoryId: SkinSourceType,
+    repositoryId: SkinSourceType | "catalog",
     phase: SyncProgress["phase"],
     current: number,
     total: number,
@@ -144,6 +152,10 @@ export class SyncService {
     return "online";
   }
 
+  private catalogScope(): string {
+    return this.assetBase === LCU_BASE ? "lcu" : "online";
+  }
+
   assetUrl(path: string | null | undefined): string {
     if (!path) return "";
     let value = path.toLowerCase();
@@ -165,6 +177,7 @@ export class SyncService {
 
   async syncAll(): Promise<SyncResult> {
     this.progress = [];
+    this.packageRank = new Map();
 
     let source = await this.resolveAssetBase();
 
@@ -177,7 +190,7 @@ export class SyncService {
     }
 
     if (skins.length === 0) {
-      return { skins, champions, source };
+      return { skins, champions, source, errors: this.collectErrors() };
     }
 
     const active = this.repositories.filter((r) => r.enabled);
@@ -195,6 +208,10 @@ export class SyncService {
         this.applyRepository(repo, byId, championNameToId),
       ),
     );
+
+    for (const skin of byId.values()) {
+      skin.sources.sort((a, b) => this.sourceWeight(a) - this.sourceWeight(b));
+    }
 
     const merged = Array.from(byId.values()).sort((a, b) => {
       if (a.championId !== b.championId) return a.championId - b.championId;
@@ -218,7 +235,27 @@ export class SyncService {
       }))
       .filter((c) => c.skinCount > 0);
 
-    return { skins: merged, champions: enrichedChampions, source };
+    return {
+      skins: merged,
+      champions: enrichedChampions,
+      source,
+      errors: this.collectErrors(),
+    };
+  }
+
+  private collectErrors(): string[] {
+    return this.progress
+      .filter((p) => p.phase === "error")
+      .map((p) => p.message);
+  }
+
+  private sourceWeight(source: SkinSourceType): number {
+    const repo = DEFAULT_REPOSITORIES.find((r) => r.id === source);
+    return repo ? repo.weight : Number.MAX_SAFE_INTEGER;
+  }
+
+  private rankKey(kind: "s" | "c", id: number): string {
+    return `${kind}${id}`;
   }
 
   private normalizeName(name: string): string {
@@ -231,7 +268,7 @@ export class SyncService {
   private async localizeTurkish(skins: Skin[]): Promise<void> {
     try {
       this.setProgress(
-        "darkseal",
+        "catalog",
         "fetching-catalog",
         0,
         0,
@@ -281,15 +318,18 @@ export class SyncService {
     skins: Skin[];
     champions: ChampionSummary[];
   }> {
-    this.setProgress("darkseal", "fetching-catalog", 0, 0, "Şampiyon listesi alınıyor...");
+    this.setProgress("catalog", "fetching-catalog", 0, 0, "Şampiyon listesi alınıyor...");
     let summaries: CommunityDragonChampionSummary[] = [];
     try {
       const raw = await fetchTextCached(
         `${this.assetBase}/v1/champion-summary.json`,
-        "catalog/champion-summary.json",
+        `catalog/${this.catalogScope()}/champion-summary.json`,
         CATALOG_TTL_MS,
       );
-      summaries = JSON.parse(raw) as CommunityDragonChampionSummary[];
+      const parsed = JSON.parse(raw);
+      summaries = Array.isArray(parsed)
+        ? (parsed as CommunityDragonChampionSummary[])
+        : [];
     } catch {
       summaries = [];
     }
@@ -306,15 +346,19 @@ export class SyncService {
       }))
       .sort((a, b) => a.name.localeCompare(b.name, "en"));
 
-    this.setProgress("darkseal", "fetching-catalog", 0, 0, "Kostüm kataloğu alınıyor...");
+    this.setProgress("catalog", "fetching-catalog", 0, 0, "Kostüm kataloğu alınıyor...");
     let catalog: CommunityDragonSkinsResponse = {};
     try {
       const raw = await fetchTextCached(
         `${this.assetBase}/v1/skins.json`,
-        "catalog/skins.json",
+        `catalog/${this.catalogScope()}/skins.json`,
         CATALOG_TTL_MS,
       );
-      catalog = JSON.parse(raw) as CommunityDragonSkinsResponse;
+      const parsed = JSON.parse(raw);
+      catalog =
+        parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as CommunityDragonSkinsResponse)
+          : {};
     } catch {
       catalog = {};
     }
@@ -416,7 +460,7 @@ export class SyncService {
         "error",
         0,
         0,
-        `${repo.label}: ${err instanceof Error ? err.message : "hata"}`,
+        `${repo.label}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -432,8 +476,27 @@ export class SyncService {
       encodeRepoPath(packagePath),
     );
     if (!skin.sources.includes(source)) skin.sources.push(source);
-    if (!skin.packageUrl) {
+    const key = this.rankKey("s", skin.id);
+    const current = this.packageRank.get(key);
+    if (!skin.packageUrl || current === undefined || repo.weight < current) {
       skin.packageUrl = url;
+      this.packageRank.set(key, repo.weight);
+    }
+  }
+
+  private attachChromaPackage(
+    chroma: Chroma,
+    repo: RepositoryConfig,
+    packagePath: string,
+  ): void {
+    const key = this.rankKey("c", chroma.id);
+    const current = this.packageRank.get(key);
+    if (!chroma.packageUrl || current === undefined || repo.weight < current) {
+      chroma.packageUrl = repo.archiveUrlTemplate.replace(
+        "{path}",
+        encodeRepoPath(packagePath),
+      );
+      this.packageRank.set(key, repo.weight);
     }
   }
 
@@ -450,9 +513,11 @@ export class SyncService {
     let processed = 0;
 
     for (const [champName, data] of Object.entries(champions)) {
+      const champKey = this.normalizeName(champName);
       const champId =
-        championNameToId.get(this.normalizeName(champName)) ??
-        championNameToId.get(this.normalizeName(champName).replace(/^mnt/gi, ""));
+        championNameToId.get(champKey) ??
+        championNameToId.get(CHAMPION_KEY_ALIASES[champKey] ?? "") ??
+        championNameToId.get(champKey.replace(/^mnt/gi, ""));
       if (champId) {
         for (const [numStr, skinName] of Object.entries(data.skins ?? {})) {
           const num = Number(numStr);
@@ -470,10 +535,11 @@ export class SyncService {
           for (const [chromaIdStr, chromaName] of Object.entries(chromas)) {
             const chromaId = Number(chromaIdStr);
             const chroma = target.chromas.find((c) => c.id === chromaId);
-            if (chroma && !chroma.packageUrl) {
-              chroma.packageUrl = repo.archiveUrlTemplate.replace(
-                "{path}",
-                encodeRepoPath(`${champName}/${skinNum}/${chromaName}.fantome`),
+            if (chroma) {
+              this.attachChromaPackage(
+                chroma,
+                repo,
+                `${champName}/${skinNum}/${chromaName}.fantome`,
               );
             }
           }
@@ -523,12 +589,15 @@ export class SyncService {
             /^skins\/([^/]+)\/chromas\/([^/]+)\/([^/]+)\.zip$/i,
           );
           if (chromaMatch) {
-            const champName = chromaMatch[1];
-            const skinName = chromaMatch[2];
-            const target = this.findSkinByName(byId, champName, skinName);
-            if (target) {
-              if (!target.sources.includes(source)) target.sources.push(source);
-            }
+            this.attachDarksealChroma(
+              byId,
+              repo,
+              chromaMatch[1],
+              chromaMatch[2],
+              chromaMatch[3],
+              path,
+              source,
+            );
           }
         }
       }
@@ -540,20 +609,72 @@ export class SyncService {
     this.setProgress(repo.id, "complete", total, total, `${total} arşiv tarandı`);
   }
 
+  private attachDarksealChroma(
+    byId: Map<number, Skin>,
+    repo: RepositoryConfig,
+    champName: string,
+    chromaLabel: string,
+    fileBase: string,
+    path: string,
+    source: SkinSourceType,
+  ): void {
+    const champKey = this.normalizeName(champName);
+    const labelKey = this.normalizeName(chromaLabel);
+    const idMatch = fileBase.match(/(\d+)\s*$/);
+    const chromaId = idMatch ? Number(idMatch[1]) : NaN;
+
+    if (Number.isFinite(chromaId) && chromaId > 0) {
+      for (const skin of byId.values()) {
+        if (this.normalizeName(skin.championName) !== champKey) continue;
+        const chroma = skin.chromas.find((c) => c.id === chromaId);
+        if (chroma) {
+          this.attachChromaPackage(chroma, repo, path);
+          if (!skin.sources.includes(source)) skin.sources.push(source);
+          return;
+        }
+      }
+    }
+
+    const target = this.findSkinByName(byId, champName, chromaLabel);
+    if (!target) return;
+    const chroma = target.chromas.find(
+      (c) => this.normalizeName(c.name) === labelKey,
+    );
+    if (chroma) this.attachChromaPackage(chroma, repo, path);
+    if (!target.sources.includes(source)) target.sources.push(source);
+  }
+
   private findSkinByName(
     byId: Map<number, Skin>,
     champName: string,
     skinName: string,
   ): Skin | null {
     const champKey = this.normalizeName(champName);
-    const skinKey = this.normalizeName(skinName.replace(/\s+\d+$/, ""));
-    let best: Skin | null = null;
+    const fullKey = this.normalizeName(skinName);
+    const strippedKey = this.normalizeName(skinName.replace(/\s+\d+$/, ""));
+    if (!fullKey) return null;
+
+    let partial: Skin | null = null;
     for (const skin of byId.values()) {
       if (this.normalizeName(skin.championName) !== champKey) continue;
       const skinNorm = this.normalizeName(skin.name);
-      if (skinNorm === skinKey) return skin;
-      if (!best && skinNorm.includes(skinKey)) best = skin;
+      if (skinNorm === fullKey) return skin;
+      if (
+        strippedKey &&
+        strippedKey !== fullKey &&
+        skinNorm === strippedKey &&
+        !partial
+      ) {
+        partial = skin;
+      }
     }
-    return best;
+    if (partial) return partial;
+    if (!strippedKey || strippedKey === fullKey) return null;
+
+    for (const skin of byId.values()) {
+      if (this.normalizeName(skin.championName) !== champKey) continue;
+      if (this.normalizeName(skin.name).includes(strippedKey)) return skin;
+    }
+    return null;
   }
 }

@@ -149,12 +149,17 @@ export async function fetchTextCached(
 export async function downloadToCache(
   url: string,
   cacheKey: string,
+  ttlMs: number,
+  reuse: boolean,
 ): Promise<string> {
-  return invoke<string>("download_to_cache", { url, cacheKey });
+  return invoke<string>("download_to_cache", { url, cacheKey, ttlMs, reuse });
 }
 
-export async function cacheResolve(cacheKey: string): Promise<string | null> {
-  return invoke<string | null>("cache_resolve", { cacheKey });
+export async function cacheResolve(
+  cacheKey: string,
+  ttlMs: number,
+): Promise<string | null> {
+  return invoke<string | null>("cache_resolve", { cacheKey, ttlMs });
 }
 
 export async function clearImageCache(): Promise<number> {

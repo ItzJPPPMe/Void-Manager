@@ -52,10 +52,28 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "void-settings",
+      version: 1,
       partialize: (s) => ({
         settings: s.settings,
         repositories: s.repositories,
       }),
+      merge: (persisted, current) => {
+        const stored = (persisted ?? {}) as Partial<SettingsStore>;
+        const settings: AppSettings = {
+          ...current.settings,
+          ...(stored.settings ?? {}),
+        };
+        return {
+          ...current,
+          ...stored,
+          settings,
+          sync: current.sync,
+          repositories: current.repositories.map((repo) => ({
+            ...repo,
+            enabled: settings.activeRepositories.includes(repo.id),
+          })),
+        };
+      },
     },
   ),
 );

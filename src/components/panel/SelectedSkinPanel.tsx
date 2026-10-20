@@ -67,14 +67,18 @@ export function SelectedSkinPanel() {
         return;
       }
       await ltkInstall(remoteUrl, skin.name, "VOID");
-      markSkinReady(skin.id, remoteUrl);
+      markSkinReady(skin.id, selectedChroma ? null : remoteUrl);
       showToast(
         "LTK Manager'a gönderildi. Açılan pencerede onaylayıp modu açın ve Start ile yamayı başlatın.",
         "success",
       );
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : "LTK Manager'a gönderilemedi",
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+            ? err.message
+            : "LTK Manager'a gönderilemedi",
         "error",
       );
     } finally {

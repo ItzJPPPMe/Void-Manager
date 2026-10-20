@@ -1,6 +1,6 @@
 [package]
 name = "void-skin-manager"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 authors = ["VOID"]
 description = "League of Legends custom skin & mod manager built with Tauri 2 and React"
@@ -24,4 +24,5 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
 reqwest = { version = "0.12", default-features = true, features = ["json", "stream"] }
 walkdir = "2"
+winreg = "0.56"
 zip = "2"

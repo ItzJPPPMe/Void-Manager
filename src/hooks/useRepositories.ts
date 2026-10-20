@@ -29,6 +29,7 @@ export function useRepositories() {
   const sync = useCallback(async () => {
     const service = serviceRef.current;
     if (!service) return;
+    if (useSettingsStore.getState().sync.running) return;
     setLoading(true);
     setSyncState({ running: true, errors: [] });
     const unsubscribe = service.onProgress((p) => {
@@ -39,13 +40,25 @@ export function useRepositories() {
       setSyncProgressText(activeEntry ? activeEntry.message : null);
     });
     try {
-      const { skins, champions, source } = await service.syncAll();
+      const { skins, champions, source, errors } = await service.syncAll();
       setSkins(skins);
       setChampions(champions);
       setCatalogSource(source);
-      setSyncState({ running: false, lastSyncedAt: Date.now() });
+      setSyncState({ running: false, lastSyncedAt: Date.now(), errors });
       const label = source === "lcu" ? "yerel istemci" : "çevrimiçi";
-      showToast(`${skins.length} kostüm yüklendi (${label})`, "success");
+      if (errors.length > 0) {
+        showToast(
+          `${skins.length} kostüm yüklendi (${label}), ancak ${errors.length} kaynak başarısız: ${errors[0]}`,
+          "error",
+        );
+      } else if (skins.length === 0) {
+        showToast(
+          "Senkronizasyon tamamlandı, ancak hiçbir kostüm yüklenemedi",
+          "error",
+        );
+      } else {
+        showToast(`${skins.length} kostüm yüklendi (${label})`, "success");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setSyncState({ running: false, errors: [message] });

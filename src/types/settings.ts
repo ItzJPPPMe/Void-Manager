@@ -19,15 +19,12 @@ export interface AppSettings {
   autoSyncOnLaunch: boolean;
   imageCacheEnabled: boolean;
   imageCacheTtlHours: number;
-  imageQuality: ImageQuality;
   dataSource: DataSourceMode;
   leaguePath: string | null;
   riotClientPath: string | null;
   patchTargetMode: PatchTargetMode;
   themeAccent: ThemeAccent;
 }
-
-export type ImageQuality = "low" | "medium" | "high" | "ultra";
 
 export type DataSourceMode = "auto" | "online" | "lcu";
 
@@ -38,7 +35,7 @@ export type PatchTargetMode = "fantome" | "wad-overlay" | "cslol-compatible";
 export type ThemeAccent = "cyan" | "violet" | "magenta" | "lime";
 
 export interface SyncProgress {
-  repositoryId: SkinSourceType;
+  repositoryId: SkinSourceType | "catalog";
   phase: SyncPhase;
   current: number;
   total: number;
@@ -113,7 +110,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoSyncOnLaunch: true,
   imageCacheEnabled: true,
   imageCacheTtlHours: 336,
-  imageQuality: "high",
   dataSource: "auto",
   leaguePath: null,
   riotClientPath: null,

@@ -52,12 +52,14 @@ export function Sidebar() {
 
   const grouped = useMemo(() => {
     const filtered = champions.filter((c) =>
-      c.name.toLowerCase().includes(championSearchQuery.toLowerCase()),
+      c.name
+        .toLocaleLowerCase("tr-TR")
+        .includes(championSearchQuery.toLocaleLowerCase("tr-TR")),
     );
     const map = new Map<string, typeof champions>();
     for (const c of filtered) {
-      const letter = c.name.charAt(0).toUpperCase();
-      if (!/^[A-Z]$/.test(letter)) continue;
+      const upper = c.name.charAt(0).toUpperCase();
+      const letter = /^[A-Z]$/.test(upper) ? upper : "#";
       const arr = map.get(letter) ?? [];
       arr.push(c);
       map.set(letter, arr);
@@ -143,7 +145,7 @@ export function Sidebar() {
 
           <div className="flex min-h-0 flex-1">
             <div className="flex w-8 shrink-0 flex-col items-center gap-0.5 overflow-y-auto py-2">
-              {ALPHABET.map((letter) => (
+              {[...ALPHABET, "#"].map((letter) => (
                 <button
                   key={letter}
                   onClick={() => scrollToLetter(letter)}

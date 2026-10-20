@@ -33,7 +33,7 @@ interface ChampionStore {
   setLoading: (v: boolean) => void;
   setSyncProgressText: (t: string | null) => void;
   toggleFavorite: (skinId: number) => void;
-  markSkinReady: (skinId: number, packagePath: string) => void;
+  markSkinReady: (skinId: number, packagePath: string | null) => void;
 }
 
 export const useChampionStore = create<ChampionStore>((set) => ({
@@ -50,7 +50,24 @@ export const useChampionStore = create<ChampionStore>((set) => ({
   loading: false,
   syncProgressText: null,
   setChampions: (champions) => set({ champions }),
-  setSkins: (skins) => set({ skins }),
+  setSkins: (skins) =>
+    set((s) => {
+      const previous = new Map(s.skins.map((skin) => [skin.id, skin]));
+      if (previous.size === 0) return { skins };
+      return {
+        skins: skins.map((skin) => {
+          const old = previous.get(skin.id);
+          if (!old) return skin;
+          const packageUrl = skin.packageUrl ?? old.packageUrl;
+          return {
+            ...skin,
+            favorite: old.favorite,
+            packageUrl,
+            ready: packageUrl ? old.ready || skin.ready : false,
+          };
+        }),
+      };
+    }),
   selectChampion: (id) =>
     set({
       selectedChampionId: id,
@@ -76,7 +93,11 @@ export const useChampionStore = create<ChampionStore>((set) => ({
     set((s) => ({
       skins: s.skins.map((skin) =>
         skin.id === skinId
-          ? { ...skin, ready: true, packageUrl: packagePath }
+          ? {
+              ...skin,
+              ready: true,
+              packageUrl: packagePath === null ? skin.packageUrl : packagePath,
+            }
           : skin,
       ),
     })),

@@ -25,10 +25,11 @@ export function useImageCache(url: string | null) {
     }
     setLoading(true);
     setError(null);
+    let cancelled = false;
     getImageLoader()
       .resolve(url)
       .then((assetUrl) => {
-        if (!alive.current) return;
+        if (cancelled || !alive.current) return;
         if (assetUrl) {
           setSrc(assetUrl);
         } else {
@@ -37,13 +38,16 @@ export function useImageCache(url: string | null) {
         }
       })
       .catch((err: unknown) => {
-        if (!alive.current) return;
+        if (cancelled || !alive.current) return;
         setError(err instanceof Error ? err.message : "Görsel yüklenemedi");
         setSrc(null);
       })
       .finally(() => {
-        if (alive.current) setLoading(false);
+        if (!cancelled && alive.current) setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [url, enabled]);
 
   return { src, loading, error };

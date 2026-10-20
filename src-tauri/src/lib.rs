@@ -10,6 +10,9 @@ use tauri::Manager;
 static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
 static LCU_HTTP: OnceLock<reqwest::Client> = OnceLock::new();
 
+const MAX_ARCHIVE_ENTRIES: usize = 20_000;
+const MAX_EXTRACTED_BYTES: u64 = 512 * 1024 * 1024;
+
 fn http() -> &'static reqwest::Client {
     HTTP.get_or_init(|| {
         reqwest::Client::builder()
@@ -169,7 +172,7 @@ fn safe_relative(rel: &str) -> PathBuf {
     let cleaned = rel.replace('\\', "/");
     let mut out = PathBuf::new();
     for part in cleaned.split('/') {
-        if part.is_empty() || part == "." || part == ".." {
+        if part.is_empty() || part == "." || part == ".." || part.contains(':') {
             continue;
         }
         out.push(part);
@@ -182,6 +185,33 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+fn age_ms(path: &Path) -> Option<u64> {
+    let meta = fs::metadata(path).ok()?;
+    let modified = meta.modified().ok()?;
+    let millis = modified
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_millis() as u64;
+    Some(now_ms().saturating_sub(millis))
+}
+
+fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    fs::write(&tmp, bytes)?;
+    match fs::rename(&tmp, path) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let _ = fs::remove_file(&tmp);
+            Err(err)
+        }
+    }
 }
 
 fn metadata_dir() -> Option<PathBuf> {
@@ -237,33 +267,58 @@ fn detect_from_metadata(prefix: &str) -> Option<(String, String)> {
     None
 }
 
-fn reg_query(key: &str, value: &str) -> Option<String> {
-    let output = command("reg")
-        .args(["query", key, "/v", value])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+fn strip_prefix_ignore_case<'a>(key: &'a str, prefix: &str) -> Option<&'a str> {
+    let head = key.get(..prefix.len())?;
+    if head.eq_ignore_ascii_case(prefix) {
+        Some(&key[prefix.len()..])
+    } else {
+        None
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with(value) {
-            continue;
-        }
-        if let Some(idx) = trimmed.find("REG_") {
-            let after = &trimmed[idx..];
-            let mut parts = after.splitn(2, char::is_whitespace);
-            parts.next();
-            if let Some(rest) = parts.next() {
-                let path = rest.trim();
-                if !path.is_empty() {
-                    return Some(path.to_string());
-                }
-            }
-        }
+}
+
+fn hive_of(key: &str) -> Option<(winreg::RegKey, &str)> {
+    if let Some(rest) = strip_prefix_ignore_case(key, "HKEY_CURRENT_USER") {
+        return Some((winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER), rest));
+    }
+    if let Some(rest) = strip_prefix_ignore_case(key, "HKCU") {
+        return Some((winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER), rest));
+    }
+    if let Some(rest) = strip_prefix_ignore_case(key, "HKEY_LOCAL_MACHINE") {
+        return Some((winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE), rest));
+    }
+    if let Some(rest) = strip_prefix_ignore_case(key, "HKLM") {
+        return Some((winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE), rest));
+    }
+    if let Some(rest) = strip_prefix_ignore_case(key, "HKEY_CLASSES_ROOT") {
+        return Some((winreg::RegKey::predef(winreg::enums::HKEY_CLASSES_ROOT), rest));
+    }
+    if let Some(rest) = strip_prefix_ignore_case(key, "HKCR") {
+        return Some((winreg::RegKey::predef(winreg::enums::HKEY_CLASSES_ROOT), rest));
+    }
+    if let Some(rest) = strip_prefix_ignore_case(key, "HKEY_USERS") {
+        return Some((winreg::RegKey::predef(winreg::enums::HKEY_USERS), rest));
+    }
+    if let Some(rest) = strip_prefix_ignore_case(key, "HKU") {
+        return Some((winreg::RegKey::predef(winreg::enums::HKEY_USERS), rest));
     }
     None
+}
+
+fn reg_open(key: &str) -> Option<winreg::RegKey> {
+    let (root, rest) = hive_of(key)?;
+    let subkey = rest.trim_start_matches(&['\\', '/'][..]);
+    if subkey.is_empty() {
+        return None;
+    }
+    root.open_subkey_with_flags(subkey, winreg::enums::KEY_READ).ok()
+}
+
+fn reg_query(key: &str, value: &str) -> Option<String> {
+    reg_open(key)?.get_value::<String, _>(value).ok()
+}
+
+fn reg_default(key: &str) -> Option<String> {
+    reg_open(key)?.get_value::<String, _>("").ok()
 }
 
 fn league_client_in(dir: &Path) -> bool {
@@ -351,7 +406,7 @@ fn detect_league() -> DetectResult {
 }
 
 fn detect_riot_client() -> DetectResult {
-    if let Some((_, path)) = detect_from_metadata("riot_client") {
+    if let Some((_, path)) = detect_from_metadata("riot client") {
         let pb = PathBuf::from(&path);
         if riot_client_in(&pb) {
             return DetectResult {
@@ -407,26 +462,6 @@ fn dir_size_mb(path: &Path) -> f64 {
         }
     }
     (total as f64) / (1024.0 * 1024.0)
-}
-
-fn reg_default(key: &str) -> Option<String> {
-    let output = command("reg")
-        .args(["query", key, "/ve"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    for line in text.lines() {
-        if let Some(idx) = line.find("REG_SZ") {
-            let value = line[idx + "REG_SZ".len()..].trim();
-            if !value.is_empty() {
-                return Some(value.to_string());
-            }
-        }
-    }
-    None
 }
 
 fn extract_exe_path(command: &str) -> Option<PathBuf> {
@@ -572,8 +607,14 @@ async fn ltk_install(
             params.push_str(&format!("&name={}", pct_encode(&trimmed)));
         }
     }
-    let src = source.unwrap_or_else(|| "VOID".into());
-    params.push_str(&format!("&source={}", pct_encode(&src)));
+    let src: String = source
+        .unwrap_or_else(|| "VOID".into())
+        .chars()
+        .take(256)
+        .collect();
+    if !src.is_empty() {
+        params.push_str(&format!("&source={}", pct_encode(&src)));
+    }
     let deep_link = format!("ltk://install?{params}");
     let exe = ltk_manager_exe().ok_or_else(|| {
         "LTK Manager kurulu değil. LTK Manager'ı yükledikten sonra tekrar deneyin.".to_string()
@@ -796,20 +837,11 @@ fn build_library(json: &serde_json::Value, mods_dir: &Path) -> LtkLibrary {
 }
 
 fn autostart_registered() -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        let output = command("reg")
-            .args([
-                "query",
-                "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-                "/v",
-                "VOID-LTK-Patcher",
-            ])
-            .output();
-        return output.map(|o| o.status.success()).unwrap_or(false);
-    }
-    #[cfg(not(target_os = "windows"))]
-    false
+    reg_query(
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "VOID-LTK-Patcher",
+    )
+    .is_some()
 }
 
 fn patcher_config() -> LtkPatcherConfig {
@@ -848,11 +880,11 @@ async fn ltk_patcher_config() -> LtkPatcherConfig {
 
 #[tauri::command]
 async fn ltk_set_autostart(enabled: bool) -> Result<LtkPatcherConfig, String> {
-    let exe = ltk_manager_exe()
-        .ok_or_else(|| "LTK Manager kurulu değil, otomatik başlatma kurulamaz.".to_string())?;
     let run_key = "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-    let output = if enabled {
-        command("reg")
+    if enabled {
+        let exe = ltk_manager_exe()
+            .ok_or_else(|| "LTK Manager kurulu değil, otomatik başlatma kurulamaz.".to_string())?;
+        let output = command("reg")
             .args([
                 "add",
                 run_key,
@@ -865,20 +897,18 @@ async fn ltk_set_autostart(enabled: bool) -> Result<LtkPatcherConfig, String> {
                 "/f",
             ])
             .output()
-    } else {
-        command("reg")
-            .args([
-                "delete",
-                run_key,
-                "/v",
-                "VOID-LTK-Patcher",
-                "/f",
-            ])
+            .map_err(|e| format!("kayıt defteri güncellenemedi: {e}"))?;
+        if !output.status.success() {
+            return Err("otomatik başlatma kaydedilemedi".into());
+        }
+    } else if reg_query(run_key, "VOID-LTK-Patcher").is_some() {
+        let output = command("reg")
+            .args(["delete", run_key, "/v", "VOID-LTK-Patcher", "/f"])
             .output()
-    }
-    .map_err(|e| format!("kayıt defteri güncellenemedi: {e}"))?;
-    if !output.status.success() && enabled {
-        return Err("otomatik başlatma kaydedilemedi".into());
+            .map_err(|e| format!("kayıt defteri güncellenemedi: {e}"))?;
+        if !output.status.success() {
+            return Err("otomatik başlatma kaldırılamadı".into());
+        }
     }
     Ok(patcher_config())
 }
@@ -896,7 +926,7 @@ async fn ltk_set_patcher_flags(enabled: bool) -> Result<LtkPatcherConfig, String
         obj.insert("startInTray".into(), serde_json::Value::Bool(enabled));
     }
     let text = serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?;
-    fs::write(&path, text).map_err(|e| format!("ayarlar yazılamadı: {e}"))?;
+    write_atomic(&path, text.as_bytes()).map_err(|e| format!("ayarlar yazılamadı: {e}"))?;
     Ok(patcher_config())
 }
 
@@ -1009,10 +1039,10 @@ async fn fetch_text_cached(
         }
     }
     let text = fetch_text(url).await?;
-    if let Some(parent) = full.parent() {
-        let _ = fs::create_dir_all(parent);
+    if !full.starts_with(&base) {
+        return Err("geçersiz yol".into());
     }
-    let _ = fs::write(&full, &text);
+    let _ = write_atomic(&full, text.as_bytes());
     Ok(text)
 }
 
@@ -1020,6 +1050,8 @@ async fn fetch_text_cached(
 async fn download_to_cache(
     url: String,
     cache_key: String,
+    ttl_ms: u64,
+    reuse: bool,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
     let base = cache_base(&app)?;
@@ -1028,10 +1060,13 @@ async fn download_to_cache(
     if !full.starts_with(&base) {
         return Err("geçersiz yol".into());
     }
-    if full.exists() {
-        if let Ok(meta) = fs::metadata(&full) {
-            if meta.len() > 0 {
-                return Ok(full.to_string_lossy().to_string());
+    if reuse && full.exists() {
+        let stale = age_ms(&full).is_some_and(|age| ttl_ms != 0 && age >= ttl_ms);
+        if !stale {
+            if let Ok(meta) = fs::metadata(&full) {
+                if meta.len() > 0 {
+                    return Ok(full.to_string_lossy().to_string());
+                }
             }
         }
     }
@@ -1052,29 +1087,32 @@ async fn download_to_cache(
         }
         resp.bytes().await.map_err(|e| e.to_string())?
     };
-    if let Some(parent) = full.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    fs::write(&full, &bytes).map_err(|e| e.to_string())?;
+    write_atomic(&full, &bytes).map_err(|e| format!("önbelleğe yazılamadı: {e}"))?;
     Ok(full.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-async fn cache_resolve(cache_key: String, app: tauri::AppHandle) -> Option<String> {
+async fn cache_resolve(
+    cache_key: String,
+    ttl_ms: u64,
+    app: tauri::AppHandle,
+) -> Option<String> {
     let base = cache_base(&app).ok()?;
     let full = base.join(safe_relative(&cache_key));
-    if full.starts_with(&base) && full.exists() {
-        Some(full.to_string_lossy().to_string())
-    } else {
-        None
+    if !full.starts_with(&base) || !full.exists() {
+        return None;
     }
+    if age_ms(&full).is_some_and(|age| ttl_ms != 0 && age >= ttl_ms) {
+        return None;
+    }
+    Some(full.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-async fn clear_image_cache(app: tauri::AppHandle) -> Result<u64, String> {
+async fn clear_image_cache(app: tauri::AppHandle) -> Result<f64, String> {
     let base = cache_base(&app)?;
     let images = base.join("images");
-    let freed = dir_size_mb(&images) as u64;
+    let freed = dir_size_mb(&images);
     if images.exists() {
         fs::remove_dir_all(&images).map_err(|e| e.to_string())?;
     }
@@ -1123,7 +1161,11 @@ async fn extract_mod_package(package_path: String, dest_dir: String) -> Result<V
     fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
     let file = fs::File::open(&pkg).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+    if archive.len() > MAX_ARCHIVE_ENTRIES {
+        return Err("paket içinde çok fazla dosya var".into());
+    }
     let mut written = Vec::new();
+    let mut total: u64 = 0;
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
         let outpath = match entry.enclosed_name() {
@@ -1138,7 +1180,13 @@ async fn extract_mod_package(package_path: String, dest_dir: String) -> Result<V
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
-        std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
+        let copied = std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
+        total = total.saturating_add(copied);
+        if total > MAX_EXTRACTED_BYTES {
+            drop(outfile);
+            let _ = fs::remove_file(&outpath);
+            return Err("paket açılmış boyutu sınırı aşıyor".into());
+        }
         written.push(outpath.to_string_lossy().to_string());
     }
     Ok(written)
@@ -1170,16 +1218,39 @@ async fn apply_mod(req: PatchRequest) -> Result<PatchResult, String> {
     .await?;
     let active = PathBuf::from(&league_path).join("VOID_ACTIVE_MODS");
     fs::create_dir_all(&active).map_err(|e| e.to_string())?;
+    let mut copied = 0usize;
+    let mut failed = 0usize;
     for f in &files {
         if let Some(name) = PathBuf::from(f).file_name() {
             let dest = active.join(format!("{}_{}", req.skin_id, name.to_string_lossy()));
-            let _ = fs::copy(f, &dest);
+            match fs::copy(f, &dest) {
+                Ok(_) => copied += 1,
+                Err(_) => failed += 1,
+            }
         }
     }
     let _ = fs::remove_dir_all(&staging);
+    if copied == 0 {
+        return Ok(PatchResult {
+            success: false,
+            message: format!("Hiçbir dosya kopyalanamadı ({} hata).", failed),
+            backup_path: None,
+        });
+    }
+    let message = if failed > 0 {
+        format!(
+            "Kostüm kısmen uygulandı ({} dosya kopyalandı, {} hata).",
+            copied, failed
+        )
+    } else {
+        format!(
+            "Kostüm uygulandı ({} paketi, {} dosya)",
+            req.archive_format, copied
+        )
+    };
     Ok(PatchResult {
         success: true,
-        message: format!("Kostüm uygulandı ({} paketi, {} dosya)", req.archive_format, files.len()),
+        message,
         backup_path: Some(active.to_string_lossy().to_string()),
     })
 }
@@ -1195,9 +1266,14 @@ async fn revert_last_patch() -> Result<PatchResult, String> {
         });
     };
     let active = PathBuf::from(&league_path).join("VOID_ACTIVE_MODS");
-    if active.exists() {
-        let _ = fs::remove_dir_all(&active);
+    if !active.exists() {
+        return Ok(PatchResult {
+            success: false,
+            message: "Geri alınacak patch bulunamadı.".into(),
+            backup_path: None,
+        });
     }
+    fs::remove_dir_all(&active).map_err(|e| format!("patch klasörü silinemedi: {e}"))?;
     Ok(PatchResult {
         success: true,
         message: "Son patch geri alındı.".into(),
@@ -1241,7 +1317,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_library, pct_encode, title_case_slug};
+    use super::{build_library, hive_of, pct_encode, reg_query, title_case_slug};
     use std::path::Path;
 
     fn deep_link(url: &str, name: &str) -> String {
@@ -1352,5 +1428,27 @@ mod tests {
         assert_eq!(library.mods.len(), 1);
         assert!(!library.mods[0].enabled);
         assert_eq!(library.mods[0].name, "A Mod");
+    }
+
+    #[test]
+    fn registry_koku_buyuk_kucuk_fark_etmez() {
+        assert!(hive_of("HKEY_CURRENT_USER\\Software\\X").is_some());
+        assert!(hive_of("hkcu\\Software\\X").is_some());
+        assert!(hive_of("HKEY_LOCAL_MACHINE\\SOFTWARE\\X").is_some());
+        assert!(hive_of("hklm\\SOFTWARE\\X").is_some());
+        assert!(hive_of("HKCR\\Folder").is_some());
+        assert!(hive_of("HKEY_USERS\\.DEFAULT").is_some());
+        assert!(hive_of("HKEY_CURRENT_CONFIG\\Software").is_none());
+        assert!(hive_of("Software\\X").is_none());
+        assert!(hive_of("").is_none());
+    }
+
+    #[test]
+    fn registry_degeri_kucuk_harfle_alinir() {
+        let value = reg_query(
+            "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+            "productname",
+        );
+        assert!(value.is_some_and(|v| !v.trim().is_empty()));
     }
 }

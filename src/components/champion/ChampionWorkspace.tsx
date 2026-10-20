@@ -33,14 +33,14 @@ export function ChampionWorkspace() {
     let list = selectedChampionId
       ? skins.filter((skin) => skin.championId === selectedChampionId)
       : skins;
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.trim().toLocaleLowerCase("tr-TR");
     if (q) {
       list = list.filter(
         (skin) =>
-          skin.name.toLowerCase().includes(q) ||
-          skin.championName.toLowerCase().includes(q) ||
+          skin.name.toLocaleLowerCase("tr-TR").includes(q) ||
+          skin.championName.toLocaleLowerCase("tr-TR").includes(q) ||
           String(skin.id).includes(q) ||
-          skin.description.toLowerCase().includes(q),
+          skin.description.toLocaleLowerCase("tr-TR").includes(q),
       );
     }
     switch (activeFilter) {
