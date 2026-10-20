@@ -9,6 +9,12 @@ import { ltkManagerStatus, ltkPatcherConfig, ltkLibrary } from "@/services/ltkMa
 
 type AppView = "skins" | "mods";
 
+export interface UpdateInfo {
+  latest: string;
+  url: string;
+  notes: string;
+}
+
 interface AppStore {
   view: AppView;
   systemStatus: SystemStatus | null;
@@ -19,6 +25,12 @@ interface AppStore {
   patcher: LtkPatcherConfig | null;
   settingsOpen: boolean;
   applyModalOpen: boolean;
+  paletteOpen: boolean;
+  detailSkinId: number | null;
+  galleryChampionId: number | null;
+  statsOpen: boolean;
+  shortcutsOpen: boolean;
+  updateInfo: UpdateInfo | null;
   toast: { message: string; type: "success" | "error" | "info" } | null;
   setView: (v: AppView) => void;
   setSystemStatus: (s: SystemStatus | null) => void;
@@ -26,8 +38,15 @@ interface AppStore {
   refreshLtk: () => Promise<LtkStatus | null>;
   refreshLibrary: () => Promise<void>;
   setPatcher: (p: LtkPatcherConfig | null) => void;
+  setLibrary: (l: LtkLibrary | null) => void;
   setSettingsOpen: (v: boolean) => void;
   setApplyModalOpen: (v: boolean) => void;
+  setPaletteOpen: (v: boolean) => void;
+  setDetailSkinId: (id: number | null) => void;
+  setGalleryChampionId: (id: number | null) => void;
+  setStatsOpen: (v: boolean) => void;
+  setShortcutsOpen: (v: boolean) => void;
+  setUpdateInfo: (u: UpdateInfo | null) => void;
   showToast: (message: string, type?: "success" | "error" | "info") => void;
   clearToast: () => void;
 }
@@ -44,6 +63,12 @@ export const useAppStore = create<AppStore>((set) => ({
   patcher: null,
   settingsOpen: false,
   applyModalOpen: false,
+  paletteOpen: false,
+  detailSkinId: null,
+  galleryChampionId: null,
+  statsOpen: false,
+  shortcutsOpen: false,
+  updateInfo: null,
   toast: null,
   setView: (view) => set({ view }),
   setSystemStatus: (systemStatus) => set({ systemStatus }),
@@ -78,8 +103,15 @@ export const useAppStore = create<AppStore>((set) => ({
     }
   },
   setPatcher: (patcher) => set({ patcher }),
+  setLibrary: (library) => set({ library }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setApplyModalOpen: (applyModalOpen) => set({ applyModalOpen }),
+  setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  setDetailSkinId: (detailSkinId) => set({ detailSkinId }),
+  setGalleryChampionId: (galleryChampionId) => set({ galleryChampionId }),
+  setStatsOpen: (statsOpen) => set({ statsOpen }),
+  setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+  setUpdateInfo: (updateInfo) => set({ updateInfo }),
   showToast: (message, type = "info") => {
     if (toastTimer) clearTimeout(toastTimer);
     set({ toast: { message, type } });

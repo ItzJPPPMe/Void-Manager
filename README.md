@@ -32,8 +32,23 @@ Akış:
 - **Türkçe kostüm adları**: senkronizasyon sonunda isimler Data Dragon `tr_TR` verisiyle yerelleştirilir; LTK'ya gönderilen mod adı da Türkçe kaydedilir.
 - Birden fazla topluluk kaynağından hibrit katalog taraması, çakışmalarda ağırlığa göre çözümleme.
 - İki ayrı menü: **Kostümler** (katalogdan kostüm seç ve gönder) ve **Modlar** (LTK kütüphanesini yönet).
-- **Modlar** ekranı: LTK kütüphanesindeki yüklü modları ad, sürüm, yazar ve şampiyon bilgisiyle listeler; yerel `.fantome` / `.modpkg` / `.zip` paketlerini tek tuşla LTK'ya aktarır.
+- **Komut paleti** (`Ctrl+K`): şampiyon, kostüm ve eylemleri tek yerden arayıp çalıştır.
+- **Kostüm detay modalı**: büyük splash, tüm chroma galerisi, kaynaklar, favori ve LTK'ya gönderme; `←` / `→` ile kostümler arasında gezinme.
+- **Görsel ve paket araçları**: detaydan splash görselini diske kaydet, paket bağlantısını kopyala veya paketi indirip doğrudan LTK kütüphanesine aktar (çevrimdışı kurulum için).
+- **Şampiyon galerisi**: seçili şampiyonun tüm kostümlerini görsel ızgarada gez (`G`).
+- **Kalıcı favoriler ve son bakılanlar**: favoriler yeniden başlatmada korunur, komut paletinde son bakılanlara hızlı erişim ve favori sayacı.
+- **Gelişmiş filtreler**: nadirlik, kaynak, "yalnızca paketli", hazır/chroma filtreleri ve isim / nadirlik / şampiyon / ID sıralaması.
+- **Kart yoğunluğu**: kompakt / normal / büyük ızgara arasında geçiş.
+- **Kostüm adı dili**: Türkçe veya İngilizce adlar arasında seçim; değişiklik otomatik senkronla uygulanır.
+- **Koleksiyon yedeği**: favorileri ve son görüntülenenleri JSON olarak dışa/içe aktarma.
+- **Sürpriz kostüm**: filtrelenen havuzdan rastgele seçim (`R` kısayolu).
+- **Tema vurgu rengi**: cyan, violet, magenta ve lime arasında anında geçiş; seçim kalıcı.
+- **Modlar** ekranı: LTK kütüphanesindeki yüklü modları ad, sürüm, yazar ve şampiyon bilgisiyle listeler; yerel `.fantome` / `.modpkg` / `.zip` paketlerini tek tuşla veya **sürükle-bırak** ile LTK'ya aktarır.
+- **Mod yönetimi**: modları doğrudan etkinleştir / devre dışı bırak (LTK `library.json` yedeklenerek yazılır), mod detay çekmecesinden klasörü aç.
 - **Patcher yönetimi**: VOID üzerinden LTK'yı Windows açılışında başlatma ve sessiz mod (tepside çalış + patcher'ı otomatik başlat) tek anahtarla ayarlanır.
+- **Özel başlık çubuğu**: sürüklenebilir pencere, küçült / büyüt / kapat düğmeleri; pencere boyutu ve konumu hatırlanır.
+- **Güncelleme denetimi** (açılışta denetim anahtarı dahil) ve **istatistik paneli** (koleksiyon, kaynak ve nadirlik dağılımı, mod özeti, önbellek boyutu).
+- **Klavye kısayolları**: `Ctrl+K` palet, `Ctrl+,` ayarlar, `Ctrl+1/2` görünüm, `F` favori, `R` rastgele, `G` galeri, `/` arama, `?` yardım.
 - Şampiyon ve kostüm arama, favoriler, kaynak / hazır durumuna göre filtreleme.
 - Çalışan oyundan yerel (LCU) veri kaynağı; LCU yoksa otomatik olarak çevrimiçi (CommunityDragon) kaynağa düşer.
 - Görsel önbelleği (disk / bellek), TTL ayarı ve tek tuşla temizleme.

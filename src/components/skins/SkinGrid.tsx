@@ -1,11 +1,21 @@
 import { SkinCard } from "./SkinCard";
 import type { Skin } from "@/types/champion";
+import type { GridDensity } from "@/types/settings";
+import { useSettingsStore } from "@/store/settingsStore";
 
 interface SkinGridProps {
   skins: Skin[];
 }
 
+const DENSITY_CLASS: Record<GridDensity, string> = {
+  compact: "grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3",
+  comfortable: "grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4",
+  large: "grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4",
+};
+
 export function SkinGrid({ skins }: SkinGridProps) {
+  const density = useSettingsStore((s) => s.settings.gridDensity);
+
   if (skins.length === 0) {
     return (
       <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2 text-center">
@@ -24,7 +34,7 @@ export function SkinGrid({ skins }: SkinGridProps) {
   }
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+    <div className={DENSITY_CLASS[density]}>
       {skins.map((skin) => (
         <SkinCard key={skin.id} skin={skin} />
       ))}

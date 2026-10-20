@@ -6,6 +6,19 @@
 
 :root {
   color-scheme: dark;
+  --accent-rgb: 0 240 255;
+}
+
+:root[data-accent="violet"] {
+  --accent-rgb: 139 92 246;
+}
+
+:root[data-accent="magenta"] {
+  --accent-rgb: 255 46 136;
+}
+
+:root[data-accent="lime"] {
+  --accent-rgb: 163 255 18;
 }
 
 * {
@@ -48,7 +61,8 @@ body,
   }
 
   .neon-text {
-    @apply text-neon-cyan drop-shadow-[0_0_8px_rgba(0,240,255,0.45)];
+    @apply text-neon-cyan;
+    filter: drop-shadow(0 0 8px rgb(var(--accent-rgb) / 0.45));
   }
 
   .panel {
@@ -61,6 +75,10 @@ body,
 
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-200 transition hover:border-neon-cyan/40 hover:text-neon-cyan;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-neon-cyan/40 bg-neon-cyan/10 px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-neon-cyan transition hover:border-neon-cyan/70 hover:bg-neon-cyan/20 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
   }
 
   .chip {

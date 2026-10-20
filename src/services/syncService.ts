@@ -13,6 +13,7 @@ import type {
   CatalogSource,
   DataSourceMode,
   RepositoryConfig,
+  SkinNameLanguage,
   SyncProgress,
 } from "@/types/settings";
 import { DEFAULT_REPOSITORIES } from "@/types/settings";
@@ -83,6 +84,7 @@ export class SyncService {
   private listeners: Set<ProgressListener> = new Set();
   private progress: SyncProgress[] = [];
   private dataSource: DataSourceMode;
+  private nameLanguage: SkinNameLanguage;
   private assetBase = CDRAGON;
   private packageRank = new Map<string, number>();
 
@@ -92,6 +94,7 @@ export class SyncService {
       enabled: settings.activeRepositories.includes(repo.id),
     }));
     this.dataSource = settings.dataSource;
+    this.nameLanguage = settings.skinNameLanguage;
   }
 
   onProgress(listener: ProgressListener): () => void {
@@ -105,6 +108,7 @@ export class SyncService {
       enabled: settings.activeRepositories.includes(repo.id),
     }));
     this.dataSource = settings.dataSource;
+    this.nameLanguage = settings.skinNameLanguage;
   }
 
   private emit(): void {
@@ -218,7 +222,9 @@ export class SyncService {
       return a.skinNum - b.skinNum;
     });
 
-    await this.localizeTurkish(merged);
+    if (this.nameLanguage === "tr") {
+      await this.localizeTurkish(merged);
+    }
 
     const skinCountByChampion = new Map<number, number>();
     for (const s of merged) {

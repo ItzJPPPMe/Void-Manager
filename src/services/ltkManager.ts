@@ -55,6 +55,7 @@ export interface LtkMod {
   enabled: boolean;
   installedAt: string | null;
   folder: string | null;
+  path: string | null;
 }
 
 export interface LtkLibrary {
@@ -116,6 +117,13 @@ export async function ltkLibrary(): Promise<LtkLibrary> {
   return invoke<LtkLibrary>("ltk_library");
 }
 
+export async function ltkSetModEnabled(
+  modId: string,
+  enabled: boolean,
+): Promise<LtkLibrary> {
+  return invoke<LtkLibrary>("ltk_set_mod_enabled", { modId, enabled });
+}
+
 export async function ltkPatcherConfig(): Promise<LtkPatcherConfig> {
   return invoke<LtkPatcherConfig>("ltk_patcher_config");
 }
@@ -164,6 +172,33 @@ export async function cacheResolve(
 
 export async function clearImageCache(): Promise<number> {
   return invoke<number>("clear_image_cache");
+}
+
+export interface CacheStats {
+  files: number;
+  mb: number;
+}
+
+export async function imageCacheStats(): Promise<CacheStats> {
+  return invoke<CacheStats>("image_cache_stats");
+}
+
+export async function saveTextFile(
+  path: string,
+  content: string,
+): Promise<void> {
+  return invoke("save_text_file", { path, content });
+}
+
+export async function loadTextFile(path: string): Promise<string> {
+  return invoke<string>("load_text_file", { path });
+}
+
+export async function copyFile(
+  source: string,
+  destination: string,
+): Promise<void> {
+  return invoke("copy_file", { source, destination });
 }
 
 export async function openFolder(path: string): Promise<void> {

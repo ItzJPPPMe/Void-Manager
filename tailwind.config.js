@@ -14,7 +14,7 @@ export default {
           500: "#353d6b",
         },
         neon: {
-          cyan: "#00f0ff",
+          cyan: "rgb(var(--accent-rgb) / <alpha-value>)",
           violet: "#8b5cf6",
           magenta: "#ff2e88",
           lime: "#a3ff12",
@@ -27,7 +27,7 @@ export default {
         mono: ["JetBrains Mono", "Consolas", "monospace"],
       },
       boxShadow: {
-        neon: "0 0 12px rgba(0,240,255,0.35)",
+        neon: "0 0 12px rgb(var(--accent-rgb) / 0.35)",
         "neon-violet": "0 0 12px rgba(139,92,246,0.4)",
         "neon-magenta": "0 0 12px rgba(255,46,136,0.35)",
         card: "0 8px 24px rgba(0,0,0,0.55)",

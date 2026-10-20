@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   Package,
   RefreshCw,
@@ -12,6 +13,10 @@ import {
   Tag,
   FolderOpen,
   Cpu,
+  X,
+  Clock,
+  FileArchive,
+  MousePointerClick,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAppStore } from "@/store/appStore";
@@ -20,9 +25,15 @@ import {
   ltkLaunch,
   ltkOpen,
   ltkSetAutostart,
+  ltkSetModEnabled,
   ltkSetPatcherFlags,
+  openFolder,
   type LtkMod,
 } from "@/services/ltkManager";
+
+const MOD_EXTENSIONS = ["fantome", "modpkg", "zip"];
+
+type ModFilter = "all" | "enabled" | "disabled";
 
 function Toggle({
   checked,
@@ -35,7 +46,10 @@ function Toggle({
 }) {
   return (
     <button
-      onClick={() => onChange(!checked)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!checked);
+      }}
       disabled={disabled}
       className={clsx(
         "relative h-5 w-9 shrink-0 rounded-full transition",
@@ -53,9 +67,22 @@ function Toggle({
   );
 }
 
-function ModCard({ mod }: { mod: LtkMod }) {
+function ModCard({
+  mod,
+  onOpen,
+  onToggle,
+  busy,
+}: {
+  mod: LtkMod;
+  onOpen: () => void;
+  onToggle: (value: boolean) => void;
+  busy: boolean;
+}) {
   return (
-    <article className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-void-800/60 p-4 transition hover:border-neon-violet/40">
+    <article
+      onClick={onOpen}
+      className="group flex cursor-pointer flex-col gap-3 rounded-2xl border border-white/10 bg-void-800/60 p-4 transition hover:border-neon-violet/40"
+    >
       <div className="flex items-start gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-neon-violet/30 to-neon-cyan/20">
           <Package className="h-5 w-5 text-neon-violet" />
@@ -74,6 +101,9 @@ function ModCard({ mod }: { mod: LtkMod }) {
                 Pasif
               </span>
             )}
+            <span className="ml-auto">
+              <Toggle checked={mod.enabled} onChange={onToggle} disabled={busy} />
+            </span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
             {mod.version && <span>v{mod.version}</span>}
@@ -112,8 +142,162 @@ function ModCard({ mod }: { mod: LtkMod }) {
             {champ}
           </span>
         ))}
+        <span className="ml-auto text-[10px] text-slate-600 opacity-0 transition group-hover:opacity-100">
+          ayrıntılar
+        </span>
       </div>
     </article>
+  );
+}
+
+function ModDrawer({
+  mod,
+  onClose,
+  onToggle,
+  busy,
+}: {
+  mod: LtkMod;
+  onClose: () => void;
+  onToggle: (value: boolean) => void;
+  busy: boolean;
+}) {
+  const showToast = useAppStore((s) => s.showToast);
+
+  const handleOpenFolder = async () => {
+    if (!mod.path) {
+      showToast("Bu mod için klasör yolu bulunamadı", "error");
+      return;
+    }
+    try {
+      await openFolder(mod.path);
+    } catch (e) {
+      showToast(typeof e === "string" ? e : "Klasör açılamadı", "error");
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex justify-end bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <aside
+        className="flex h-full w-full max-w-md animate-slideUp flex-col border-l border-white/10 bg-void-900 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-start justify-between gap-3 border-b border-white/5 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-neon-violet/80">
+              Mod Detayı
+            </p>
+            <h2 className="mt-1 font-display text-xl font-bold tracking-wide text-slate-100">
+              {mod.name}
+            </h2>
+          </div>
+          <button onClick={onClose} className="btn-ghost !px-2.5" aria-label="Kapat">
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold">
+                {mod.enabled ? "Etkin" : "Pasif"}
+              </p>
+              <p className="text-xs text-slate-400">
+                LTK profilinde modu aç/kapat
+              </p>
+            </div>
+            <Toggle checked={mod.enabled} onChange={onToggle} disabled={busy} />
+          </div>
+
+          <div>
+            <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Açıklama
+            </p>
+            <p className="text-xs leading-relaxed text-slate-300">
+              {mod.description || "Açıklama yok."}
+            </p>
+          </div>
+
+          {mod.authors.length > 0 && (
+            <div>
+              <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Yazarlar
+              </p>
+              <p className="text-xs text-slate-300">{mod.authors.join(", ")}</p>
+            </div>
+          )}
+
+          {mod.champions.length > 0 && (
+            <div>
+              <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Şampiyonlar
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from(new Set(mod.champions)).map((champ) => (
+                  <span key={champ} className="chip border-neon-cyan/30 text-neon-cyan">
+                    {champ}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px] text-slate-400">
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-600">id</span>
+              <span className="truncate">{mod.id}</span>
+            </div>
+            {mod.version && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-600">sürüm</span>
+                <span>{mod.version}</span>
+              </div>
+            )}
+            {mod.format && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-600">biçim</span>
+                <span>.{mod.format}</span>
+              </div>
+            )}
+            {mod.folder && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-600">klasör</span>
+                <span className="truncate">{mod.folder}</span>
+              </div>
+            )}
+            {mod.installedAt && (
+              <div className="flex items-start justify-between gap-3">
+                <span className="inline-flex items-center gap-1 text-slate-600">
+                  <Clock className="h-3 w-3" /> kurulum
+                </span>
+                <span className="text-right">
+                  {new Date(mod.installedAt).toLocaleString("tr-TR")}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {mod.path && (
+            <p className="break-all font-mono text-[10px] leading-relaxed text-slate-600">
+              {mod.path}
+            </p>
+          )}
+        </div>
+
+        <footer className="flex gap-2 border-t border-white/5 p-4">
+          <button
+            onClick={() => void handleOpenFolder()}
+            className="btn-ghost flex-1"
+            disabled={!mod.path}
+          >
+            <FolderOpen className="h-4 w-4" />
+            Klasörü Aç
+          </button>
+        </footer>
+      </aside>
+    </div>
   );
 }
 
@@ -123,16 +307,90 @@ export function ModsView() {
   const loading = useAppStore((s) => s.libraryLoading);
   const refreshLibrary = useAppStore((s) => s.refreshLibrary);
   const refreshLtk = useAppStore((s) => s.refreshLtk);
+  const setLibrary = useAppStore((s) => s.setLibrary);
   const ltkStatus = useAppStore((s) => s.ltkStatus);
   const patcher = useAppStore((s) => s.patcher);
   const setPatcher = useAppStore((s) => s.setPatcher);
   const showToast = useAppStore((s) => s.showToast);
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<ModFilter>("all");
   const [importing, setImporting] = useState(false);
   const [busyFlag, setBusyFlag] = useState<"autostart" | "flags" | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const importPaths = useCallback(
+    async (paths: string[]) => {
+      const accepted = paths.filter((path) => {
+        const ext = path.split(".").pop()?.toLowerCase() ?? "";
+        return MOD_EXTENSIONS.includes(ext);
+      });
+      if (accepted.length === 0) {
+        showToast(
+          "Desteklenen biçimler: .fantome, .modpkg, .zip",
+          "error",
+        );
+        return;
+      }
+      setImporting(true);
+      let failed = 0;
+      for (const path of accepted) {
+        try {
+          await ltkImportFile(path);
+        } catch {
+          failed += 1;
+        }
+      }
+      setImporting(false);
+      if (failed === accepted.length) {
+        showToast("Paketler içe aktarılamadı", "error");
+        return;
+      }
+      showToast(
+        failed === 0
+          ? `${accepted.length} paket LTK'ya gönderildi. Kurulum birkaç saniye sürebilir.`
+          : `${accepted.length - failed} paket gönderildi, ${failed} tanesi başarısız oldu.`,
+        failed === 0 ? "success" : "info",
+      );
+      setTimeout(() => {
+        void refreshLibrary();
+        void refreshLtk();
+      }, 4000);
+    },
+    [refreshLibrary, refreshLtk, showToast],
+  );
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const payload = event.payload;
+        if (payload.type === "enter" || payload.type === "over") {
+          setDragActive(true);
+        } else if (payload.type === "leave") {
+          setDragActive(false);
+        } else if (payload.type === "drop") {
+          setDragActive(false);
+          void importPaths(payload.paths);
+        }
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [importPaths]);
 
   const mods = useMemo(() => {
-    const list = library?.mods ?? [];
+    let list = library?.mods ?? [];
+    if (filter === "enabled") list = list.filter((m) => m.enabled);
+    if (filter === "disabled") list = list.filter((m) => !m.enabled);
     const q = query.trim().toLocaleLowerCase("tr-TR");
     if (!q) return list;
     return list.filter(
@@ -142,38 +400,43 @@ export function ModsView() {
         m.authors.some((a) => a.toLocaleLowerCase("tr-TR").includes(q)) ||
         m.champions.some((c) => c.toLocaleLowerCase("tr-TR").includes(q)),
     );
-  }, [library, query]);
+  }, [library, query, filter]);
 
   const enabledCount = library?.mods.filter((m) => m.enabled).length ?? 0;
+  const selected = library?.mods.find((m) => m.id === selectedId) ?? null;
 
   const handleImport = async () => {
     try {
       const picked = await open({
         multiple: true,
         title: "Mod paketi seç (.fantome / .modpkg / .zip)",
-        filters: [
-          { name: "Mod paketleri", extensions: ["fantome", "modpkg", "zip"] },
-        ],
+        filters: [{ name: "Mod paketleri", extensions: MOD_EXTENSIONS }],
       });
       if (!picked) return;
       const paths = Array.isArray(picked) ? picked : [picked];
       if (paths.length === 0) return;
-      setImporting(true);
-      for (const path of paths) {
-        await ltkImportFile(path);
-      }
-      showToast(
-        `${paths.length} paket LTK'ya gönderildi. Kurulum birkaç saniye sürebilir.`,
-        "success",
-      );
-      setTimeout(() => {
-        void refreshLibrary();
-        void refreshLtk();
-      }, 4000);
+      await importPaths(paths);
     } catch (e) {
       showToast(typeof e === "string" ? e : "Paket içe aktarılamadı", "error");
+    }
+  };
+
+  const handleToggleMod = async (mod: LtkMod, value: boolean) => {
+    setTogglingId(mod.id);
+    try {
+      const next = await ltkSetModEnabled(mod.id, value);
+      setLibrary(next);
+      showToast(
+        `${mod.name} ${value ? "etkinleştirildi" : "devre dışı bırakıldı"}`,
+        "success",
+      );
+    } catch (e) {
+      showToast(
+        typeof e === "string" ? e : "Mod durumu güncellenemedi",
+        "error",
+      );
     } finally {
-      setImporting(false);
+      setTogglingId(null);
     }
   };
 
@@ -198,7 +461,10 @@ export function ModsView() {
         "success",
       );
     } catch (e) {
-      showToast(typeof e === "string" ? e : "Otomatik başlatma ayarlanamadı", "error");
+      showToast(
+        typeof e === "string" ? e : "Otomatik başlatma ayarlanamadı",
+        "error",
+      );
     } finally {
       setBusyFlag(null);
     }
@@ -225,7 +491,7 @@ export function ModsView() {
   const patcherRunning = Boolean(ltkStatus?.patcherRunning);
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col">
+    <section className="relative flex min-w-0 flex-1 flex-col">
       <header className="shrink-0 border-b border-white/5 bg-void-900/60 px-6 py-4 backdrop-blur-md">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -258,13 +524,35 @@ export function ModsView() {
           </div>
         </div>
 
-        <div className="mt-3">
+        <div className="mt-3 flex items-center gap-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Mod, yazar veya şampiyon ara..."
-            className="w-full rounded-xl border border-white/10 bg-void-800 py-2.5 px-3 text-sm outline-none transition placeholder:text-slate-500 focus:border-neon-violet/50"
+            className="flex-1 rounded-xl border border-white/10 bg-void-800 py-2.5 px-3 text-sm outline-none transition placeholder:text-slate-500 focus:border-neon-violet/50"
           />
+          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-void-800 p-1">
+            {(
+              [
+                ["all", "Tümü"],
+                ["enabled", "Etkin"],
+                ["disabled", "Pasif"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setFilter(id)}
+                className={clsx(
+                  "rounded-lg px-3 py-1.5 font-display text-xs font-semibold uppercase tracking-wide transition",
+                  filter === id
+                    ? "bg-neon-violet/20 text-neon-violet"
+                    : "text-slate-400 hover:text-slate-200",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -366,24 +654,58 @@ export function ModsView() {
           <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10 py-16 text-center">
             <Package className="h-8 w-8 text-slate-600" />
             <p className="text-sm text-slate-400">
-              {query
-                ? "Aramayla eşleşen mod yok."
+              {query || filter !== "all"
+                ? "Eşleşen mod yok."
                 : "Henüz yüklü mod yok. 'Paket İçe Aktar' ile başlayın."}
+            </p>
+            <p className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+              <MousePointerClick className="h-3.5 w-3.5" />
+              Paket dosyalarını pencereye sürükleyerek de ekleyebilirsiniz.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
             {mods.map((mod) => (
-              <ModCard key={mod.id} mod={mod} />
+              <ModCard
+                key={mod.id}
+                mod={mod}
+                onOpen={() => setSelectedId(mod.id)}
+                onToggle={(value) => void handleToggleMod(mod, value)}
+                busy={togglingId === mod.id}
+              />
             ))}
           </div>
         )}
 
         <div className="mt-6 flex items-center gap-1.5 text-[11px] text-slate-600">
           <Power className="h-3 w-3" />
-          Modların etkin/pasif durumu LTK profilinde yönetilir.
+          Modların etkin/pasif durumu LTK profilinde yönetilir. Değişiklikten önce
+          library.json yedeklenir.
         </div>
       </div>
+
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-void-950/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-neon-cyan/60 bg-neon-cyan/5 px-16 py-12">
+            <FileArchive className="h-12 w-12 text-neon-cyan" />
+            <p className="font-display text-lg font-bold tracking-wide text-neon-cyan">
+              Paketi buraya bırak
+            </p>
+            <p className="text-xs text-slate-400">
+              .fantome · .modpkg · .zip desteklenir
+            </p>
+          </div>
+        </div>
+      )}
+
+      {selected && (
+        <ModDrawer
+          mod={selected}
+          onClose={() => setSelectedId(null)}
+          onToggle={(value) => void handleToggleMod(selected, value)}
+          busy={togglingId === selected.id}
+        />
+      )}
     </section>
   );
 }

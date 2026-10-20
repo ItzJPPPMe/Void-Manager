@@ -706,6 +706,7 @@ pub struct LtkMod {
     pub enabled: bool,
     pub installed_at: Option<String>,
     pub folder: Option<String>,
+    pub path: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -782,6 +783,17 @@ fn build_library(json: &serde_json::Value, mods_dir: &Path) -> LtkLibrary {
             let slug = entry.get("slug").and_then(|v| v.as_str());
             let config = read_mod_config(&mods_dir.join(slug.unwrap_or(id)))
                 .or_else(|| read_mod_config(&mods_dir.join(id)));
+            let path = {
+                let candidate = mods_dir.join(slug.unwrap_or(id));
+                let fallback = mods_dir.join(id);
+                if candidate.exists() {
+                    Some(candidate.to_string_lossy().to_string())
+                } else if fallback.exists() {
+                    Some(fallback.to_string_lossy().to_string())
+                } else {
+                    None
+                }
+            };
 
             let display = config
                 .as_ref()
@@ -818,6 +830,7 @@ fn build_library(json: &serde_json::Value, mods_dir: &Path) -> LtkLibrary {
                     .and_then(|v| v.as_str())
                     .map(String::from),
                 folder: folder_of.get(id).cloned(),
+                path,
             });
         }
     }
@@ -834,6 +847,85 @@ fn build_library(json: &serde_json::Value, mods_dir: &Path) -> LtkLibrary {
         profiles,
         dir: None,
     }
+}
+
+fn set_mod_enabled_in_json(
+    json: &mut serde_json::Value,
+    mod_id: &str,
+    enabled: bool,
+) -> Result<(), String> {
+    let exists = json
+        .get("mods")
+        .and_then(|v| v.as_array())
+        .map(|list| {
+            list.iter()
+                .any(|m| m.get("id").and_then(|v| v.as_str()) == Some(mod_id))
+        })
+        .unwrap_or(false);
+    if !exists {
+        return Err("mod kütüphanede bulunamadı".into());
+    }
+
+    let active_id = json
+        .get("activeProfileId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let profiles = json
+        .get_mut("profiles")
+        .and_then(|v| v.as_array_mut())
+        .ok_or_else(|| "kütüphanede profil listesi yok".to_string())?;
+    let index = match active_id {
+        Some(ref id) => profiles
+            .iter()
+            .position(|p| p.get("id").and_then(|v| v.as_str()) == Some(id.as_str())),
+        None => None,
+    }
+    .or_else(|| if profiles.is_empty() { None } else { Some(0) })
+    .ok_or_else(|| "etkin profil bulunamadı".to_string())?;
+    let profile = &mut profiles[index];
+
+    let object = profile
+        .as_object_mut()
+        .ok_or_else(|| "profil biçimi geçersiz".to_string())?;
+    let entry = object
+        .entry("enabledMods")
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+    let list = entry
+        .as_array_mut()
+        .ok_or_else(|| "enabledMods biçimi geçersiz".to_string())?;
+    let position = list
+        .iter()
+        .position(|v| v.as_str() == Some(mod_id));
+    match (enabled, position) {
+        (true, None) => list.push(serde_json::Value::String(mod_id.to_string())),
+        (false, Some(index)) => {
+            list.remove(index);
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn ltk_set_mod_enabled(mod_id: String, enabled: bool) -> Result<LtkLibrary, String> {
+    let base = ltk_data_dir().ok_or_else(|| "APPDATA bulunamadı".to_string())?;
+    let path = base.join("library.json");
+    let raw = fs::read_to_string(&path).map_err(|_| {
+        "LTK kütüphanesi okunamadı. LTK Manager'ı bir kez çalıştırıp tekrar deneyin.".to_string()
+    })?;
+    let mut json: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("kütüphane çözümlenemedi: {e}"))?;
+
+    set_mod_enabled_in_json(&mut json, &mod_id, enabled)?;
+
+    let bytes = serde_json::to_vec_pretty(&json).map_err(|e| e.to_string())?;
+    let backup = base.join("library.json.void-backup");
+    fs::copy(&path, &backup).map_err(|e| format!("yedek oluşturulamadı: {e}"))?;
+    write_atomic(&path, &bytes).map_err(|e| format!("kütüphane yazılamadı: {e}"))?;
+
+    let mut library = build_library(&json, &base.join("mods"));
+    library.dir = Some(base.to_string_lossy().to_string());
+    Ok(library)
 }
 
 fn autostart_registered() -> bool {
@@ -1119,6 +1211,87 @@ async fn clear_image_cache(app: tauri::AppHandle) -> Result<f64, String> {
     Ok(freed)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CacheStats {
+    files: u64,
+    mb: f64,
+}
+
+fn cache_dir_stats(path: &Path) -> CacheStats {
+    if !path.exists() {
+        return CacheStats {
+            files: 0,
+            mb: 0.0,
+        };
+    }
+    let mut files: u64 = 0;
+    let mut total: u64 = 0;
+    for entry in walkdir::WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if entry.file_type().is_file() {
+            files += 1;
+            total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+        }
+    }
+    CacheStats {
+        files,
+        mb: (total as f64) / (1024.0 * 1024.0),
+    }
+}
+
+#[tauri::command]
+async fn image_cache_stats(app: tauri::AppHandle) -> Result<CacheStats, String> {
+    let base = cache_base(&app)?;
+    Ok(cache_dir_stats(&base.join("images")))
+}
+
+const MAX_TEXT_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+#[tauri::command]
+async fn save_text_file(path: String, content: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("dosya yolu boş olamaz".into());
+    }
+    if content.len() as u64 > MAX_TEXT_FILE_BYTES {
+        return Err("dosya çok büyük".into());
+    }
+    write_atomic(&PathBuf::from(&path), content.as_bytes())
+        .map_err(|e| format!("dosya yazılamadı: {e}"))
+}
+
+#[tauri::command]
+async fn load_text_file(path: String) -> Result<String, String> {
+    if path.trim().is_empty() {
+        return Err("dosya yolu boş olamaz".into());
+    }
+    let target = PathBuf::from(&path);
+    let meta = fs::metadata(&target).map_err(|_| "dosya okunamadı".to_string())?;
+    if meta.len() > MAX_TEXT_FILE_BYTES {
+        return Err("dosya çok büyük".into());
+    }
+    fs::read_to_string(&target).map_err(|e| format!("dosya okunamadı: {e}"))
+}
+
+#[tauri::command]
+async fn copy_file(source: String, destination: String) -> Result<(), String> {
+    if destination.trim().is_empty() {
+        return Err("hedef yol boş olamaz".into());
+    }
+    let src = PathBuf::from(&source);
+    if !src.is_file() {
+        return Err("kaynak dosya bulunamadı".into());
+    }
+    let dst = PathBuf::from(&destination);
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("hedef klasör oluşturulamadı: {e}"))?;
+    }
+    fs::copy(&src, &dst).map_err(|e| format!("dosya kopyalanamadı: {e}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 async fn open_folder(path: String) -> Result<(), String> {
     let target = PathBuf::from(&path);
@@ -1126,6 +1299,27 @@ async fn open_folder(path: String) -> Result<(), String> {
     {
         command("explorer")
             .arg(target)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://github.com/") {
+        return Err("yalnızca GitHub bağlantıları açılabilir".into());
+    }
+    if url
+        .chars()
+        .any(|c| c.is_whitespace() || c == '"' || c == '\'' || c == '\\')
+    {
+        return Err("geçersiz bağlantı".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        command("explorer")
+            .arg(&url)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
@@ -1287,6 +1481,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             detect_league_path,
             detect_riot_client_path,
@@ -1297,7 +1492,12 @@ pub fn run() {
             download_to_cache,
             cache_resolve,
             clear_image_cache,
+            image_cache_stats,
+            save_text_file,
+            load_text_file,
+            copy_file,
             open_folder,
+            open_url,
             extract_mod_package,
             apply_mod,
             revert_last_patch,
@@ -1306,6 +1506,7 @@ pub fn run() {
             ltk_open,
             ltk_import_file,
             ltk_library,
+            ltk_set_mod_enabled,
             ltk_patcher_config,
             ltk_set_autostart,
             ltk_set_patcher_flags,
@@ -1317,7 +1518,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_library, hive_of, pct_encode, reg_query, title_case_slug};
+    use super::{
+        build_library, cache_dir_stats, hive_of, load_text_file, now_ms, pct_encode,
+        reg_query, save_text_file, set_mod_enabled_in_json, title_case_slug,
+    };
     use std::path::Path;
 
     fn deep_link(url: &str, name: &str) -> String {
@@ -1450,5 +1654,102 @@ mod tests {
             "productname",
         );
         assert!(value.is_some_and(|v| !v.trim().is_empty()));
+    }
+
+    fn sample_library() -> serde_json::Value {
+        serde_json::from_str(
+            r#"{
+                "mods": [ { "id": "m1" }, { "id": "m2" } ],
+                "profiles": [
+                    { "id": "p1", "name": "Default", "enabledMods": ["m1"] },
+                    { "id": "p2", "name": "Ikinci", "enabledMods": [] }
+                ],
+                "activeProfileId": "p1"
+            }"#,
+        )
+        .expect("ornek kutuphane cozulemedi")
+    }
+
+    fn enabled_ids(json: &serde_json::Value) -> Vec<String> {
+        json.get("profiles")
+            .and_then(|v| v.as_array())
+            .and_then(|list| list.first())
+            .and_then(|p| p.get("enabledMods"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn mod_durumu_ekler_ve_cikarir() {
+        let mut json = sample_library();
+        set_mod_enabled_in_json(&mut json, "m2", true).expect("eklenemedi");
+        assert_eq!(enabled_ids(&json), vec!["m1", "m2"]);
+
+        set_mod_enabled_in_json(&mut json, "m1", false).expect("cikarilamadi");
+        assert_eq!(enabled_ids(&json), vec!["m2"]);
+
+        set_mod_enabled_in_json(&mut json, "m2", false).expect("cikarilamadi");
+        assert!(enabled_ids(&json).is_empty());
+    }
+
+    #[test]
+    fn mod_durumu_tekrar_uygulanabilir_ve_bilinmeyen_mod_hata_verir() {
+        let mut json = sample_library();
+        set_mod_enabled_in_json(&mut json, "m1", true).expect("eklenemedi");
+        set_mod_enabled_in_json(&mut json, "m1", true).expect("eklenemedi");
+        assert_eq!(enabled_ids(&json), vec!["m1"]);
+
+        set_mod_enabled_in_json(&mut json, "m1", false).expect("cikarilamadi");
+        set_mod_enabled_in_json(&mut json, "m1", false).expect("cikarilamadi");
+        assert!(enabled_ids(&json).is_empty());
+
+        assert!(set_mod_enabled_in_json(&mut json, "yok", true).is_err());
+    }
+
+    #[test]
+    fn etkin_profil_yoksa_ilk_profil_kullanilir() {
+        let mut json = sample_library();
+        json["activeProfileId"] = serde_json::Value::String("p9".into());
+        set_mod_enabled_in_json(&mut json, "m2", true).expect("eklenemedi");
+        assert_eq!(enabled_ids(&json), vec!["m1", "m2"]);
+    }
+
+    #[tokio::test]
+    async fn metin_dosyasi_yazilip_okunur() {
+        let dir = std::env::temp_dir().join(format!("void-test-{}", now_ms()));
+        let path = dir.join("yedek.json");
+        let path_text = path.to_string_lossy().to_string();
+        let content = "{\"favorites\":[1,2,3]}";
+        save_text_file(path_text.clone(), content.into())
+            .await
+            .expect("yazilamadi");
+        let loaded = load_text_file(path_text.clone()).await.expect("okunamadi");
+        assert_eq!(loaded, content);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(save_text_file("  ".into(), "x".into()).await.is_err());
+    }
+
+    #[test]
+    fn onbellek_istatistigi_dosyalari_sayar() {
+        let dir = std::env::temp_dir().join(format!("void-cache-{}", now_ms()));
+        std::fs::create_dir_all(&dir).expect("dizin olusturulamadi");
+        std::fs::write(dir.join("a.png"), vec![0u8; 2048]).expect("yazilamadi");
+        std::fs::write(dir.join("b.png"), vec![0u8; 1024]).expect("yazilamadi");
+        let stats = cache_dir_stats(&dir);
+        assert_eq!(stats.files, 2);
+        assert!((stats.mb - 0.0029296875).abs() < 0.0001);
+
+        let missing = dir.join("yok");
+        let empty = cache_dir_stats(&missing);
+        assert_eq!(empty.files, 0);
+        assert_eq!(empty.mb, 0.0);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

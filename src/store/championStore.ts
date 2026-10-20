@@ -6,6 +6,18 @@ import type {
   SkinSourceType,
 } from "@/types/champion";
 import type { CatalogSource } from "@/types/settings";
+import { useCollectionStore } from "@/store/collectionStore";
+
+export type SkinSort = "default" | "name" | "rarity" | "champion" | "id";
+export type RarityFilter =
+  | "all"
+  | "kUltimate"
+  | "kExalted"
+  | "kMythic"
+  | "kTranscendent"
+  | "kLegendary"
+  | "kEpic"
+  | "kRare";
 
 interface ChampionStore {
   champions: ChampionSummary[];
@@ -17,6 +29,9 @@ interface ChampionStore {
   championSearchQuery: string;
   activeFilter: SkinFilter;
   sourceFilter: SkinSourceType | "all";
+  rarityFilter: RarityFilter;
+  sortMode: SkinSort;
+  onlyWithPackage: boolean;
   catalogSource: CatalogSource | null;
   loading: boolean;
   syncProgressText: string | null;
@@ -29,11 +44,15 @@ interface ChampionStore {
   setChampionSearchQuery: (q: string) => void;
   setActiveFilter: (f: SkinFilter) => void;
   setSourceFilter: (s: SkinSourceType | "all") => void;
+  setRarityFilter: (r: RarityFilter) => void;
+  setSortMode: (s: SkinSort) => void;
+  setOnlyWithPackage: (v: boolean) => void;
   setCatalogSource: (s: CatalogSource | null) => void;
   setLoading: (v: boolean) => void;
   setSyncProgressText: (t: string | null) => void;
   toggleFavorite: (skinId: number) => void;
   markSkinReady: (skinId: number, packagePath: string | null) => void;
+  rehydrateFavorites: () => void;
 }
 
 export const useChampionStore = create<ChampionStore>((set) => ({
@@ -46,6 +65,9 @@ export const useChampionStore = create<ChampionStore>((set) => ({
   championSearchQuery: "",
   activeFilter: "all",
   sourceFilter: "all",
+  rarityFilter: "all",
+  sortMode: "default",
+  onlyWithPackage: false,
   catalogSource: null,
   loading: false,
   syncProgressText: null,
@@ -53,15 +75,16 @@ export const useChampionStore = create<ChampionStore>((set) => ({
   setSkins: (skins) =>
     set((s) => {
       const previous = new Map(s.skins.map((skin) => [skin.id, skin]));
-      if (previous.size === 0) return { skins };
+      const favorites = new Set(useCollectionStore.getState().favorites);
       return {
         skins: skins.map((skin) => {
+          const favorite = favorites.has(skin.id);
           const old = previous.get(skin.id);
-          if (!old) return skin;
+          if (!old) return { ...skin, favorite };
           const packageUrl = skin.packageUrl ?? old.packageUrl;
           return {
             ...skin,
-            favorite: old.favorite,
+            favorite,
             packageUrl,
             ready: packageUrl ? old.ready || skin.ready : false,
           };
@@ -74,21 +97,29 @@ export const useChampionStore = create<ChampionStore>((set) => ({
       selectedSkinId: null,
       selectedChromaId: null,
     }),
-  selectSkin: (id) => set({ selectedSkinId: id, selectedChromaId: null }),
+  selectSkin: (id) => {
+    useCollectionStore.getState().pushRecent(id);
+    set({ selectedSkinId: id, selectedChromaId: null });
+  },
   selectChroma: (id) => set({ selectedChromaId: id }),
   setSearchQuery: (q) => set({ searchQuery: q }),
   setChampionSearchQuery: (q) => set({ championSearchQuery: q }),
   setActiveFilter: (f) => set({ activeFilter: f }),
   setSourceFilter: (s) => set({ sourceFilter: s }),
+  setRarityFilter: (r) => set({ rarityFilter: r }),
+  setSortMode: (s) => set({ sortMode: s }),
+  setOnlyWithPackage: (v) => set({ onlyWithPackage: v }),
   setCatalogSource: (s) => set({ catalogSource: s }),
   setLoading: (v) => set({ loading: v }),
   setSyncProgressText: (t) => set({ syncProgressText: t }),
-  toggleFavorite: (skinId) =>
+  toggleFavorite: (skinId) => {
+    const favorite = useCollectionStore.getState().toggleFavorite(skinId);
     set((s) => ({
       skins: s.skins.map((skin) =>
-        skin.id === skinId ? { ...skin, favorite: !skin.favorite } : skin,
+        skin.id === skinId ? { ...skin, favorite } : skin,
       ),
-    })),
+    }));
+  },
   markSkinReady: (skinId, packagePath) =>
     set((s) => ({
       skins: s.skins.map((skin) =>
@@ -101,4 +132,14 @@ export const useChampionStore = create<ChampionStore>((set) => ({
           : skin,
       ),
     })),
+  rehydrateFavorites: () =>
+    set((s) => {
+      const favorites = new Set(useCollectionStore.getState().favorites);
+      return {
+        skins: s.skins.map((skin) => ({
+          ...skin,
+          favorite: favorites.has(skin.id),
+        })),
+      };
+    }),
 }));

@@ -24,6 +24,9 @@ export interface AppSettings {
   riotClientPath: string | null;
   patchTargetMode: PatchTargetMode;
   themeAccent: ThemeAccent;
+  skinNameLanguage: SkinNameLanguage;
+  gridDensity: GridDensity;
+  checkUpdateOnLaunch: boolean;
 }
 
 export type DataSourceMode = "auto" | "online" | "lcu";
@@ -33,6 +36,10 @@ export type CatalogSource = "online" | "lcu";
 export type PatchTargetMode = "fantome" | "wad-overlay" | "cslol-compatible";
 
 export type ThemeAccent = "cyan" | "violet" | "magenta" | "lime";
+
+export type SkinNameLanguage = "tr" | "en";
+
+export type GridDensity = "compact" | "comfortable" | "large";
 
 export interface SyncProgress {
   repositoryId: SkinSourceType | "catalog";
@@ -115,4 +122,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   riotClientPath: null,
   patchTargetMode: "fantome",
   themeAccent: "cyan",
+  skinNameLanguage: "tr",
+  gridDensity: "comfortable",
+  checkUpdateOnLaunch: true,
 };

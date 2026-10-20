@@ -9,21 +9,39 @@ import {
   Shield,
   FolderOpen,
   Database,
+  Info,
+  Download,
+  Sparkles,
+  LayoutGrid,
+  Languages,
+  Upload,
+  FileJson,
 } from "lucide-react";
 import clsx from "clsx";
+import { getVersion } from "@tauri-apps/api/app";
+import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useSettingsStore } from "@/store/settingsStore";
 import { useAppStore } from "@/store/appStore";
+import { useChampionStore } from "@/store/championStore";
+import { useCollectionStore } from "@/store/collectionStore";
 import { useRepositories } from "@/hooks/useRepositories";
 import {
   detectLeaguePath,
   detectRiotClientPath,
+  imageCacheStats,
   lcuStatus,
+  loadTextFile,
   ltkOpen,
+  saveTextFile,
+  type CacheStats,
 } from "@/services/ltkManager";
 import { getImageLoader } from "@/services/imageLoader";
+import { checkForUpdate, openReleasePage } from "@/services/updateService";
 import type {
   DataSourceMode,
+  GridDensity,
   PatchTargetMode,
+  SkinNameLanguage,
   ThemeAccent,
 } from "@/types/settings";
 
@@ -32,6 +50,17 @@ const ACCENTS: { id: ThemeAccent; label: string; color: string }[] = [
   { id: "violet", label: "Neon Violet", color: "#8b5cf6" },
   { id: "magenta", label: "Neon Magenta", color: "#ff2e88" },
   { id: "lime", label: "Neon Lime", color: "#a3ff12" },
+];
+
+const DENSITIES: { id: GridDensity; label: string }[] = [
+  { id: "compact", label: "Kompakt" },
+  { id: "comfortable", label: "Normal" },
+  { id: "large", label: "Büyük" },
+];
+
+const NAME_LANGUAGES: { id: SkinNameLanguage; label: string }[] = [
+  { id: "tr", label: "Türkçe" },
+  { id: "en", label: "İngilizce" },
 ];
 
 const PATCH_MODES: { id: PatchTargetMode; label: string; hint: string }[] = [
@@ -69,11 +98,136 @@ export function SettingsPanel() {
   const refreshLtk = useAppStore((s) => s.refreshLtk);
   const { sync } = useRepositories();
   const syncRunning = useSettingsStore((s) => s.sync.running);
-  const [tab, setTab] = useState<"repos" | "network" | "patch" | "theme">("repos");
+  const updateInfo = useAppStore((s) => s.updateInfo);
+  const setUpdateInfo = useAppStore((s) => s.setUpdateInfo);
+  const [tab, setTab] = useState<
+    "repos" | "network" | "patch" | "theme" | "about"
+  >("repos");
+  const [version, setVersion] = useState("—");
+  const [checking, setChecking] = useState(false);
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
   const [lcu, setLcu] = useState<{ running: boolean; port: number | null }>({
     running: false,
     port: null,
   });
+
+  useEffect(() => {
+    void getVersion()
+      .then(setVersion)
+      .catch(() => setVersion("—"));
+    void imageCacheStats()
+      .then(setCacheStats)
+      .catch(() => setCacheStats(null));
+  }, []);
+
+  const refreshCacheStats = () => {
+    void imageCacheStats()
+      .then(setCacheStats)
+      .catch(() => setCacheStats(null));
+  };
+
+  const handleLanguageChange = (language: SkinNameLanguage) => {
+    if (settings.skinNameLanguage === language) return;
+    update({ skinNameLanguage: language });
+    if (syncRunning) {
+      showToast(
+        "Dil değişikliği bir sonraki senkronizasyonda uygulanacak",
+        "info",
+      );
+      return;
+    }
+    showToast(
+      language === "tr"
+        ? "Kostüm adları Türkçe olarak yenileniyor..."
+        : "Kostüm adları İngilizce olarak yenileniyor...",
+      "info",
+    );
+    void sync();
+  };
+
+  const handleExportCollection = async () => {
+    const collection = useCollectionStore.getState();
+    const payload = {
+      app: "void-skin-manager",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      favorites: collection.favorites,
+      recent: collection.recent,
+    };
+    try {
+      const path = await saveDialog({
+        defaultPath: "void-favoriler.json",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path) return;
+      await saveTextFile(path, JSON.stringify(payload, null, 2));
+      showToast(
+        `${payload.favorites.length} favori ve ${payload.recent.length} son görüntülenen dışa aktarıldı`,
+        "success",
+      );
+    } catch (err) {
+      showToast(
+        typeof err === "string" ? err : "Yedek dosyası yazılamadı",
+        "error",
+      );
+    }
+  };
+
+  const handleImportCollection = async () => {
+    setBackupBusy(true);
+    try {
+      const path = await openDialog({
+        multiple: false,
+        directory: false,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (typeof path !== "string") return;
+      const text = await loadTextFile(path);
+      const parsed = JSON.parse(text) as {
+        favorites?: unknown;
+        recent?: unknown;
+      };
+      const asIds = (value: unknown): number[] =>
+        Array.isArray(value)
+          ? value.filter(
+              (item): item is number =>
+                typeof item === "number" && Number.isFinite(item),
+            )
+          : [];
+      const favorites = asIds(parsed.favorites);
+      const recent = asIds(parsed.recent);
+      if (favorites.length === 0 && recent.length === 0) {
+        showToast("Dosyada geçerli favori bulunamadı", "error");
+        return;
+      }
+      const counts = useCollectionStore
+        .getState()
+        .importCollection({ favorites, recent });
+      useChampionStore.getState().rehydrateFavorites();
+      showToast(`${counts.favorites} favori içe aktarıldı`, "success");
+    } catch {
+      showToast("Yedek dosyası okunamadı (geçerli JSON değil)", "error");
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleCheckUpdate = async () => {
+    setChecking(true);
+    try {
+      const info = await checkForUpdate();
+      setUpdateInfo(info);
+      showToast(
+        info ? `Yeni sürüm mevcut: v${info.latest}` : "Uygulama güncel",
+        info ? "success" : "info",
+      );
+    } catch {
+      showToast("Güncelleme kontrol edilemedi", "error");
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const refreshLcu = async () => {
     try {
@@ -116,6 +270,7 @@ export function SettingsPanel() {
     try {
       const mb = await getImageLoader().clearCache();
       showToast(`${mb.toFixed(1)} MB önbellek temizlendi`, "success");
+      refreshCacheStats();
     } catch (err) {
       showToast(
         typeof err === "string" ? err : "Önbellek temizlenemedi",
@@ -167,6 +322,7 @@ export function SettingsPanel() {
               ["network", "Görseller & Ağ"],
               ["patch", "Patch Motoru"],
               ["theme", "Tema"],
+              ["about", "Hakkında"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -395,10 +551,23 @@ export function SettingsPanel() {
                 />
               </div>
 
-              <button onClick={() => void handleClearCache()} className="btn-ghost">
-                <Trash2 className="h-4 w-4" />
-                Önbelleği Temizle
-              </button>
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Önbellek boyutu</p>
+                  <p className="text-xs text-slate-400">
+                    {cacheStats
+                      ? `${cacheStats.files} görsel · ${cacheStats.mb.toFixed(1)} MB`
+                      : "Önbellek boyutu okunamadı"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => void handleClearCache()}
+                  className="btn-ghost shrink-0"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Temizle
+                </button>
+              </div>
 
               <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
                 <div>
@@ -604,6 +773,189 @@ export function SettingsPanel() {
                     <span className="text-xs font-semibold">{a.label}</span>
                   </button>
                 ))}
+              </div>
+              <p className="text-xs leading-relaxed text-slate-500">
+                Vurgu rengi tüm arayüzde anında uygulanır ve tercih olarak
+                saklanır. Neon Cyan varsayılandır.
+              </p>
+
+              <div className="flex items-center gap-2 pt-2">
+                <LayoutGrid className="h-4 w-4 text-neon-cyan" />
+                <h3 className="font-display text-sm font-semibold uppercase tracking-wide">
+                  Kart Yoğunluğu
+                </h3>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {DENSITIES.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => update({ gridDensity: d.id })}
+                    className={clsx(
+                      "rounded-xl border px-3 py-2.5 text-xs font-semibold transition",
+                      settings.gridDensity === d.id
+                        ? "border-neon-cyan/60 bg-neon-cyan/10 text-neon-cyan"
+                        : "border-white/10 bg-white/[0.02] text-slate-300 hover:border-white/20",
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs leading-relaxed text-slate-500">
+                Kostüm ızgarasının kart boyutunu belirler.
+              </p>
+
+              <div className="flex items-center gap-2 pt-2">
+                <Languages className="h-4 w-4 text-neon-violet" />
+                <h3 className="font-display text-sm font-semibold uppercase tracking-wide">
+                  Kostüm Adları
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {NAME_LANGUAGES.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => handleLanguageChange(l.id)}
+                    className={clsx(
+                      "rounded-xl border px-3 py-2.5 text-xs font-semibold transition",
+                      settings.skinNameLanguage === l.id
+                        ? "border-neon-violet/60 bg-neon-violet/10 text-neon-violet"
+                        : "border-white/10 bg-white/[0.02] text-slate-300 hover:border-white/20",
+                    )}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs leading-relaxed text-slate-500">
+                Değişiklik kostüm adlarının yeniden senkronize edilmesini
+                gerektirir ve otomatik başlatılır. Mod adları her zaman Türkçe
+                kalır.
+              </p>
+            </div>
+          )}
+
+          {tab === "about" && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-2">
+                <Info className="h-4 w-4 text-neon-cyan" />
+                <h3 className="font-display text-sm font-semibold uppercase tracking-wide">
+                  VOID Skin Manager
+                </h3>
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Sürüm</p>
+                  <p className="font-mono text-xs text-slate-400">v{version}</p>
+                </div>
+                <button
+                  onClick={() => void handleCheckUpdate()}
+                  disabled={checking}
+                  className={clsx("btn-primary", checking && "opacity-50")}
+                >
+                  <RefreshCw
+                    className={clsx("h-4 w-4", checking && "animate-spin")}
+                  />
+                  Güncellemeyi Denetle
+                </button>
+              </div>
+
+              <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    Açılışta güncelleme denetimi
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Uygulama açılırken yeni sürüm olup olmadığını kontrol eder.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.checkUpdateOnLaunch}
+                  onChange={(e) =>
+                    update({ checkUpdateOnLaunch: e.target.checked })
+                  }
+                  className="h-4 w-4 accent-cyan-400"
+                />
+              </label>
+
+              {updateInfo && (
+                <div className="rounded-xl border border-neon-lime/40 bg-neon-lime/5 p-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-neon-lime" />
+                    <p className="font-display text-sm font-semibold text-neon-lime">
+                      v{updateInfo.latest} hazır
+                    </p>
+                  </div>
+                  {updateInfo.notes && (
+                    <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-line text-xs leading-relaxed text-slate-300">
+                      {updateInfo.notes}
+                    </p>
+                  )}
+                  <button
+                    onClick={() =>
+                      void openReleasePage(updateInfo.url).catch(() =>
+                        showToast("Sürüm sayfası açılamadı", "error"),
+                      )
+                    }
+                    className="btn-primary mt-3"
+                  >
+                    <Download className="h-4 w-4" />
+                    Sürüm Sayfasını Aç
+                  </button>
+                </div>
+              )}
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <div className="flex items-center gap-2">
+                  <FileJson className="h-4 w-4 text-neon-lime" />
+                  <p className="text-sm font-medium">Koleksiyon Yedeği</p>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                  Favorileri ve son görüntülenenleri JSON dosyasına aktarın;
+                  başka bir bilgisayarda içe aktararak koleksiyonunuzu taşıyın.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => void handleExportCollection()}
+                    disabled={backupBusy}
+                    className="btn-ghost"
+                  >
+                    <Download className="h-4 w-4" />
+                    Dışa Aktar
+                  </button>
+                  <button
+                    onClick={() => void handleImportCollection()}
+                    disabled={backupBusy}
+                    className={clsx("btn-ghost", backupBusy && "opacity-50")}
+                  >
+                    <Upload className="h-4 w-4" />
+                    İçe Aktar
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <p className="text-sm font-medium">Açık kaynak</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                  VOID, MIT lisanslı bir topluluk projesidir. Riot Games ile
+                  bağlantılı değildir. Kostüm modları LTK Manager üzerinden
+                  uygulanır.
+                </p>
+                <button
+                  onClick={() =>
+                    void openReleasePage(
+                      "https://github.com/ItzJPPPMe/Void-Manager",
+                    ).catch(() =>
+                      showToast("Bağlantı açılamadı", "error"),
+                    )
+                  }
+                  className="btn-ghost mt-3"
+                >
+                  <Github className="h-4 w-4" />
+                  GitHub Deposu
+                </button>
               </div>
             </div>
           )}

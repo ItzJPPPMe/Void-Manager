@@ -7,10 +7,14 @@ import {
   Package,
   RefreshCw,
   CheckCircle2,
+  Heart,
+  BarChart3,
+  Keyboard,
 } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
 import { useAppStore } from "@/store/appStore";
+import { useCollectionStore } from "@/store/collectionStore";
 import { useImageCache } from "@/hooks/useImageCache";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -33,6 +37,7 @@ function ChampionIcon({ path }: { path: string }) {
 
 export function Sidebar() {
   const champions = useChampionStore((s) => s.champions);
+  const favoriteCount = useCollectionStore((s) => s.favorites.length);
   const selectedChampionId = useChampionStore((s) => s.selectedChampionId);
   const selectChampion = useChampionStore((s) => s.selectChampion);
   const championSearchQuery = useChampionStore((s) => s.championSearchQuery);
@@ -40,6 +45,10 @@ export function Sidebar() {
     (s) => s.setChampionSearchQuery,
   );
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
+  const setStatsOpen = useAppStore((s) => s.setStatsOpen);
+  const setShortcutsOpen = useAppStore((s) => s.setShortcutsOpen);
+  const activeFilter = useChampionStore((s) => s.activeFilter);
+  const setActiveFilter = useChampionStore((s) => s.setActiveFilter);
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const library = useAppStore((s) => s.library);
@@ -141,6 +150,33 @@ export function Sidebar() {
                 className="w-full rounded-lg border border-white/10 bg-void-800 py-2 pl-8 pr-3 text-sm outline-none transition placeholder:text-slate-500 focus:border-neon-cyan/50 focus:shadow-neon"
               />
             </div>
+            <button
+              onClick={() => {
+                selectChampion(null);
+                setActiveFilter(
+                  activeFilter === "favorites" ? "all" : "favorites",
+                );
+              }}
+              className={clsx(
+                "mt-2 flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
+                activeFilter === "favorites"
+                  ? "border-rose-400/50 bg-rose-500/15 text-rose-300"
+                  : "border-white/10 bg-void-800 text-slate-400 hover:border-rose-400/40 hover:text-rose-300",
+              )}
+            >
+              <Heart
+                className={clsx(
+                  "h-3.5 w-3.5",
+                  activeFilter === "favorites" && "fill-current",
+                )}
+              />
+              Favorilerim
+              {favoriteCount > 0 && (
+                <span className="ml-auto rounded-full border border-white/15 bg-black/20 px-1.5 font-mono text-[10px] leading-4">
+                  {favoriteCount}
+                </span>
+              )}
+            </button>
           </div>
 
           <div className="flex min-h-0 flex-1">
@@ -242,13 +278,31 @@ export function Sidebar() {
       )}
 
       <div className="border-t border-white/5 p-3">
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className="btn-ghost w-full"
-        >
-          <Settings2 className="h-4 w-4" />
-          Ayarlar
-        </button>
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="btn-ghost flex-1"
+          >
+            <Settings2 className="h-4 w-4" />
+            Ayarlar
+          </button>
+          <button
+            onClick={() => setStatsOpen(true)}
+            className="btn-ghost !px-2.5"
+            title="İstatistikler"
+            aria-label="İstatistikler"
+          >
+            <BarChart3 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setShortcutsOpen(true)}
+            className="btn-ghost !px-2.5"
+            title="Klavye kısayolları"
+            aria-label="Klavye kısayolları"
+          >
+            <Keyboard className="h-4 w-4" />
+          </button>
+        </div>
         <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-slate-500">
           {view === "skins" ? (
             <span className="inline-flex items-center gap-1">

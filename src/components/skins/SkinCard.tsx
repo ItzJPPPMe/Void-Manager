@@ -1,32 +1,10 @@
-import { Heart, Trash2, Wand2, Check, Palette } from "lucide-react";
+import { Heart, Check, Palette, Maximize2 } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
 import { useAppStore } from "@/store/appStore";
 import { LazyImage } from "@/components/common/LazyImage";
+import { RARITY_BADGE, SOURCE_BADGE } from "@/lib/skinMeta";
 import type { Skin, SkinSourceType } from "@/types/champion";
-
-const SOURCE_BADGE: Record<
-  SkinSourceType,
-  { label: string; className: string }
-> = {
-  bettie9: { label: "Sunshine", className: "border-amber-400/40 text-amber-300" },
-  alban1911: {
-    label: "Rose",
-    className: "border-fuchsia-400/40 text-fuchsia-300",
-  },
-  darkseal: { label: "Community", className: "border-sky-400/40 text-sky-300" },
-  local: { label: "Yerel", className: "border-neon-lime/40 text-neon-lime" },
-};
-
-const RARITY_BADGE: Record<string, { label: string; className: string }> = {
-  kUltimate: { label: "ULTIMATE", className: "border-red-400/50 bg-red-500/15 text-red-300" },
-  kMythic: { label: "MYTHIC", className: "border-amber-400/50 bg-amber-500/15 text-amber-300" },
-  kLegendary: { label: "EPİK", className: "border-purple-400/50 bg-purple-500/15 text-purple-300" },
-  kEpic: { label: "EPİK", className: "border-purple-400/50 bg-purple-500/15 text-purple-300" },
-  kExalted: { label: "EXALTED", className: "border-pink-400/50 bg-pink-500/15 text-pink-300" },
-  kTranscendent: { label: "TRASCENDENT", className: "border-cyan-400/50 bg-cyan-500/15 text-cyan-300" },
-  kRare: { label: "NADİR", className: "border-sky-400/50 bg-sky-500/15 text-sky-300" },
-};
 
 function primarySource(skin: Skin): SkinSourceType | null {
   return skin.sources.length > 0 ? skin.sources[0] : null;
@@ -40,7 +18,7 @@ export function SkinCard({ skin }: SkinCardProps) {
   const selectSkin = useChampionStore((s) => s.selectSkin);
   const selectedSkinId = useChampionStore((s) => s.selectedSkinId);
   const toggleFavorite = useChampionStore((s) => s.toggleFavorite);
-  const showToast = useAppStore((s) => s.showToast);
+  const setDetailSkinId = useAppStore((s) => s.setDetailSkinId);
 
   const isSelected = selectedSkinId === skin.id;
   const chromaCount = skin.chromas.length;
@@ -50,6 +28,7 @@ export function SkinCard({ skin }: SkinCardProps) {
   return (
     <article
       onClick={() => selectSkin(skin.id)}
+      onDoubleClick={() => setDetailSkinId(skin.id)}
       className={clsx(
         "group relative cursor-pointer overflow-hidden rounded-xl border bg-void-850 shadow-card transition duration-200",
         "[content-visibility:auto] [contain-intrinsic-size:auto_220px]",
@@ -99,6 +78,16 @@ export function SkinCard({ skin }: SkinCardProps) {
           <button
             onClick={(e) => {
               e.stopPropagation();
+              setDetailSkinId(skin.id);
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-neon-cyan/50 hover:text-neon-cyan"
+            title="Detayları aç"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
               toggleFavorite(skin.id);
             }}
             className={clsx(
@@ -110,31 +99,6 @@ export function SkinCard({ skin }: SkinCardProps) {
             title="Favorilere ekle"
           >
             <Heart className={clsx("h-4 w-4", skin.favorite && "fill-current")} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              showToast(
-                skin.packageUrl
-                  ? `${skin.name} için mod paketi mevcut`
-                  : `${skin.name} için mod paketi bulunamadı`,
-                skin.packageUrl ? "info" : "error",
-              );
-            }}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-neon-magenta/50 hover:text-neon-magenta"
-            title="Mod durumu"
-          >
-            <Wand2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              showToast(`${skin.id} silme isteği kuyruğa alındı`, "info");
-            }}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-rose-400/50 hover:text-rose-400"
-            title="Sil"
-          >
-            <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </div>
