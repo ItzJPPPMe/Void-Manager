@@ -1,13 +1,26 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Minus, Square, Copy, X, Search, ArrowUpCircle } from "lucide-react";
+import {
+  Minus,
+  Square,
+  Copy,
+  X,
+  Search,
+  ArrowUpCircle,
+  Bell,
+  Palette,
+} from "lucide-react";
 import clsx from "clsx";
 import { useAppStore } from "@/store/appStore";
+import { useNotificationStore } from "@/store/notificationStore";
 
 export function TitleBar() {
   const view = useAppStore((s) => s.view);
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen);
+  const setThemeEditorOpen = useAppStore((s) => s.setThemeEditorOpen);
   const updateInfo = useAppStore((s) => s.updateInfo);
+  const unread = useNotificationStore((s) => s.unread);
+  const setNotificationPanelOpen = useNotificationStore((s) => s.setPanelOpen);
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -70,6 +83,29 @@ export function TitleBar() {
           v{updateInfo.latest}
         </span>
       )}
+
+      <button
+        onClick={() => setThemeEditorOpen(true)}
+        className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-slate-400 transition hover:border-neon-cyan/40 hover:text-neon-cyan"
+        title="Tema editörü (Ctrl+Shift+T)"
+        aria-label="Tema editörü"
+      >
+        <Palette className="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        onClick={() => setNotificationPanelOpen(true)}
+        className="relative flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-slate-400 transition hover:border-neon-cyan/40 hover:text-neon-cyan"
+        title="Bildirim merkezi (N)"
+        aria-label="Bildirim merkezi"
+      >
+        <Bell className="h-3.5 w-3.5" />
+        {unread > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-neon-magenta px-1 text-[9px] font-bold text-void-950">
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </button>
 
       <div className="ml-1 flex items-center">
         <button

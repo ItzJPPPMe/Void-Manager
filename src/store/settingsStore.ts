@@ -52,11 +52,19 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "void-settings",
-      version: 1,
+      version: 2,
       partialize: (s) => ({
         settings: s.settings,
         repositories: s.repositories,
       }),
+      migrate: (persisted) => {
+        const stored = (persisted ?? {}) as Partial<SettingsStore>;
+        return {
+          ...stored,
+          settings: { ...DEFAULT_SETTINGS, ...(stored.settings ?? {}) },
+          repositories: stored.repositories ?? DEFAULT_REPOSITORIES,
+        };
+      },
       merge: (persisted, current) => {
         const stored = (persisted ?? {}) as Partial<SettingsStore>;
         const settings: AppSettings = {

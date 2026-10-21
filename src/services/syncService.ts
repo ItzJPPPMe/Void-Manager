@@ -18,6 +18,12 @@ import type {
 } from "@/types/settings";
 import { DEFAULT_REPOSITORIES } from "@/types/settings";
 import { fetchTextCached, lcuStatus } from "./ltkManager";
+import {
+  fingerprintOf,
+  readRepoSnapshot,
+  writeRepoSnapshot,
+  type RepoSnapshot,
+} from "@/lib/syncCache";
 
 type ProgressListener = (progress: SyncProgress[]) => void;
 
@@ -77,6 +83,8 @@ export interface SyncResult {
   champions: ChampionSummary[];
   source: CatalogSource;
   errors: string[];
+  reusedRepos: SkinSourceType[];
+  changedRepos: SkinSourceType[];
 }
 
 export class SyncService {
@@ -87,6 +95,9 @@ export class SyncService {
   private nameLanguage: SkinNameLanguage;
   private assetBase = CDRAGON;
   private packageRank = new Map<string, number>();
+  private reusedRepos: SkinSourceType[] = [];
+  private changedRepos: SkinSourceType[] = [];
+  private smartSync = true;
 
   constructor(settings: AppSettings) {
     this.repositories = DEFAULT_REPOSITORIES.map((repo) => ({
@@ -109,6 +120,7 @@ export class SyncService {
     }));
     this.dataSource = settings.dataSource;
     this.nameLanguage = settings.skinNameLanguage;
+    this.smartSync = settings.smartSync;
   }
 
   private emit(): void {
@@ -182,6 +194,8 @@ export class SyncService {
   async syncAll(): Promise<SyncResult> {
     this.progress = [];
     this.packageRank = new Map();
+    this.reusedRepos = [];
+    this.changedRepos = [];
 
     let source = await this.resolveAssetBase();
 
@@ -194,7 +208,14 @@ export class SyncService {
     }
 
     if (skins.length === 0) {
-      return { skins, champions, source, errors: this.collectErrors() };
+      return {
+        skins,
+        champions,
+        source,
+        errors: this.collectErrors(),
+        reusedRepos: [],
+        changedRepos: [],
+      };
     }
 
     const active = this.repositories.filter((r) => r.enabled);
@@ -246,6 +267,8 @@ export class SyncService {
       champions: enrichedChampions,
       source,
       errors: this.collectErrors(),
+      reusedRepos: [...this.reusedRepos],
+      changedRepos: [...this.changedRepos],
     };
   }
 
@@ -490,6 +513,71 @@ export class SyncService {
     }
   }
 
+  private applySnapshot(
+    snapshot: RepoSnapshot,
+    repo: RepositoryConfig,
+    source: SkinSourceType,
+    byId: Map<number, Skin>,
+  ): void {
+    for (const [id, path] of Object.entries(snapshot.skinPackages)) {
+      const skin = byId.get(Number(id));
+      if (skin) this.attachPackage(skin, repo, path, source);
+    }
+    for (const [id, path] of Object.entries(snapshot.chromaPackages)) {
+      const chromaId = Number(id);
+      for (const skin of byId.values()) {
+        const chroma = skin.chromas.find((c) => c.id === chromaId);
+        if (chroma) {
+          this.attachChromaPackage(chroma, repo, path);
+          if (!skin.sources.includes(source)) skin.sources.push(source);
+          break;
+        }
+      }
+    }
+  }
+
+  private buildSnapshot(
+    fingerprint: string,
+    skinPackages: Map<string, string>,
+    chromaPackages: Map<string, string>,
+  ): RepoSnapshot {
+    return {
+      fingerprint,
+      skinPackages: Object.fromEntries(skinPackages),
+      chromaPackages: Object.fromEntries(chromaPackages),
+    };
+  }
+
+  private commitSnapshot(
+    repoId: SkinSourceType,
+    snapshot: RepoSnapshot,
+  ): void {
+    writeRepoSnapshot(repoId, snapshot);
+    this.changedRepos.push(repoId);
+  }
+
+  private tryReuse(
+    repoId: SkinSourceType,
+    fingerprint: string,
+    repo: RepositoryConfig,
+    source: SkinSourceType,
+    byId: Map<number, Skin>,
+  ): boolean {
+    if (!this.smartSync) return false;
+    const snapshot = readRepoSnapshot(repoId);
+    if (!snapshot || snapshot.fingerprint !== fingerprint) return false;
+    this.applySnapshot(snapshot, repo, source, byId);
+    this.reusedRepos.push(repoId);
+    this.setProgress(
+      repoId,
+      "complete",
+      0,
+      0,
+      "Değişiklik yok, önbellekten yeniden kullanıldı",
+    );
+    return true;
+  }
+
   private attachChromaPackage(
     chroma: Chroma,
     repo: RepositoryConfig,
@@ -515,8 +603,16 @@ export class SyncService {
     const raw = await fetchTextCached(repo.indexUrl, "catalog/bettie9-index.json", 3600_000);
     const index = JSON.parse(raw) as Bettie9Index;
     const champions = index.champions ?? {};
+
+    const fingerprint = fingerprintOf(
+      `${raw}|${championNameToId.size}|${[...championNameToId.keys()].sort().join(",")}`,
+    );
+    if (this.tryReuse(repo.id, fingerprint, repo, "bettie9", byId)) return;
+
     const total = Object.keys(champions).length;
     let processed = 0;
+    const skinPackages = new Map<string, string>();
+    const chromaPackages = new Map<string, string>();
 
     for (const [champName, data] of Object.entries(champions)) {
       const champKey = this.normalizeName(champName);
@@ -531,6 +627,7 @@ export class SyncService {
           const skinId = champId * 1000 + num;
           const target = byId.get(skinId);
           if (target) this.attachPackage(target, repo, `${champName}/${skinName}.fantome`, "bettie9");
+          skinPackages.set(String(skinId), `${champName}/${skinName}.fantome`);
         }
         for (const [skinNum, chromas] of Object.entries(data.chromas ?? {})) {
           const num = Number(skinNum);
@@ -548,6 +645,10 @@ export class SyncService {
                 `${champName}/${skinNum}/${chromaName}.fantome`,
               );
             }
+            chromaPackages.set(
+              String(chromaId),
+              `${champName}/${skinNum}/${chromaName}.fantome`,
+            );
           }
           if (!target.sources.includes("bettie9")) target.sources.push("bettie9");
         }
@@ -558,6 +659,10 @@ export class SyncService {
       }
     }
 
+    this.commitSnapshot(
+      repo.id,
+      this.buildSnapshot(fingerprint, skinPackages, chromaPackages),
+    );
     this.setProgress(repo.id, "complete", total, total, `${total} şampiyon eşlendi`);
   }
 
@@ -574,6 +679,12 @@ export class SyncService {
     );
     const total = blobs.length;
 
+    const fingerprint = fingerprintOf(`${source}|${tree.sha ?? raw.length}|${raw.length}`);
+    if (this.tryReuse(repo.id, fingerprint, repo, source, byId)) return;
+
+    const skinPackages = new Map<string, string>();
+    const chromaPackages = new Map<string, string>();
+
     for (let i = 0; i < total; i++) {
       const path = blobs[i].path.replace(/\\/g, "/");
       if (source === "alban1911") {
@@ -582,6 +693,7 @@ export class SyncService {
           const skinId = Number(match[3]);
           const target = byId.get(skinId);
           if (target) this.attachPackage(target, repo, path, source);
+          skinPackages.set(String(skinId), path);
         }
       } else {
         const match = path.match(/^skins\/([^/]+)\/([^/]+)\.zip$/i);
@@ -589,13 +701,16 @@ export class SyncService {
           const champName = match[1];
           const skinName = match[2];
           const target = this.findSkinByName(byId, champName, skinName);
-          if (target) this.attachPackage(target, repo, path, source);
+          if (target) {
+            this.attachPackage(target, repo, path, source);
+            skinPackages.set(String(target.id), path);
+          }
         } else {
           const chromaMatch = path.match(
             /^skins\/([^/]+)\/chromas\/([^/]+)\/([^/]+)\.zip$/i,
           );
           if (chromaMatch) {
-            this.attachDarksealChroma(
+            const resolved = this.applyDarksealChroma(
               byId,
               repo,
               chromaMatch[1],
@@ -604,6 +719,12 @@ export class SyncService {
               path,
               source,
             );
+            if (resolved) {
+              chromaPackages.set(String(resolved.chromaId), path);
+              if (resolved.skinId !== null) {
+                skinPackages.set(String(resolved.skinId), path);
+              }
+            }
           }
         }
       }
@@ -612,10 +733,14 @@ export class SyncService {
       }
     }
 
+    this.commitSnapshot(
+      repo.id,
+      this.buildSnapshot(fingerprint, skinPackages, chromaPackages),
+    );
     this.setProgress(repo.id, "complete", total, total, `${total} arşiv tarandı`);
   }
 
-  private attachDarksealChroma(
+  private applyDarksealChroma(
     byId: Map<number, Skin>,
     repo: RepositoryConfig,
     champName: string,
@@ -623,7 +748,7 @@ export class SyncService {
     fileBase: string,
     path: string,
     source: SkinSourceType,
-  ): void {
+  ): { skinId: number | null; chromaId: number } | null {
     const champKey = this.normalizeName(champName);
     const labelKey = this.normalizeName(chromaLabel);
     const idMatch = fileBase.match(/(\d+)\s*$/);
@@ -636,18 +761,21 @@ export class SyncService {
         if (chroma) {
           this.attachChromaPackage(chroma, repo, path);
           if (!skin.sources.includes(source)) skin.sources.push(source);
-          return;
+          return { skinId: skin.id, chromaId };
         }
       }
     }
 
     const target = this.findSkinByName(byId, champName, chromaLabel);
-    if (!target) return;
+    if (!target) return null;
     const chroma = target.chromas.find(
       (c) => this.normalizeName(c.name) === labelKey,
     );
     if (chroma) this.attachChromaPackage(chroma, repo, path);
     if (!target.sources.includes(source)) target.sources.push(source);
+    return chroma
+      ? { skinId: target.id, chromaId: chroma.id }
+      : { skinId: target.id, chromaId: -1 };
   }
 
   private findSkinByName(

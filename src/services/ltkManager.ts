@@ -124,6 +124,73 @@ export async function ltkSetModEnabled(
   return invoke<LtkLibrary>("ltk_set_mod_enabled", { modId, enabled });
 }
 
+export async function ltkSetModsBulk(
+  modIds: string[],
+  enabled: boolean,
+): Promise<LtkLibrary> {
+  return invoke<LtkLibrary>("ltk_set_mods_bulk", { modIds, enabled });
+}
+
+export interface LibraryBackup {
+  path: string;
+  name: string;
+  sizeKb: number;
+  createdAt: number;
+}
+
+export async function ltkListBackups(): Promise<LibraryBackup[]> {
+  return invoke<LibraryBackup[]>("ltk_list_backups");
+}
+
+export async function ltkBackupLibrary(destination: string): Promise<string> {
+  return invoke<string>("ltk_backup_library", { destination });
+}
+
+export async function ltkRestoreLibrary(source: string): Promise<LtkLibrary> {
+  return invoke<LtkLibrary>("ltk_restore_library", { source });
+}
+
+export interface DirEntryInfo {
+  name: string;
+  path: string;
+  isDir: boolean;
+  sizeKb: number;
+}
+
+export async function listDirEntries(path: string): Promise<DirEntryInfo[]> {
+  return invoke<DirEntryInfo[]>("list_dir_entries", { path });
+}
+
+export interface AppInfo {
+  version: string;
+  name: string;
+  tauriVersion: string;
+  os: string;
+  arch: string;
+}
+
+export async function appInfo(): Promise<AppInfo> {
+  return invoke<AppInfo>("app_info");
+}
+
+export interface ModHealthIssue {
+  modId: string;
+  modName: string;
+  severity: "error" | "warning" | "info";
+  code: string;
+  message: string;
+}
+
+export interface ModHealthReport {
+  issues: ModHealthIssue[];
+  checked: number;
+  healthy: number;
+}
+
+export async function ltkModHealth(): Promise<ModHealthReport> {
+  return invoke<ModHealthReport>("ltk_mod_health");
+}
+
 export async function ltkPatcherConfig(): Promise<LtkPatcherConfig> {
   return invoke<LtkPatcherConfig>("ltk_patcher_config");
 }

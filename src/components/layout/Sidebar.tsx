@@ -10,6 +10,8 @@ import {
   Heart,
   BarChart3,
   Keyboard,
+  Dices,
+  Palette,
 } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
@@ -47,6 +49,9 @@ export function Sidebar() {
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
   const setStatsOpen = useAppStore((s) => s.setStatsOpen);
   const setShortcutsOpen = useAppStore((s) => s.setShortcutsOpen);
+  const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
+  const setRouletteOpen = useAppStore((s) => s.setRouletteOpen);
+  const setThemeEditorOpen = useAppStore((s) => s.setThemeEditorOpen);
   const activeFilter = useChampionStore((s) => s.activeFilter);
   const setActiveFilter = useChampionStore((s) => s.setActiveFilter);
   const view = useAppStore((s) => s.view);
@@ -278,6 +283,32 @@ export function Sidebar() {
       )}
 
       <div className="border-t border-white/5 p-3">
+        <div className="mb-2 grid grid-cols-3 gap-1.5">
+          <button
+            onClick={() => setDashboardOpen(true)}
+            className="btn-ghost !px-1.5 !text-[10px]"
+            title="Koleksiyon panosu"
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Pano
+          </button>
+          <button
+            onClick={() => setRouletteOpen(true)}
+            className="btn-ghost !px-1.5 !text-[10px]"
+            title="Skin Roulette"
+          >
+            <Dices className="h-3.5 w-3.5" />
+            Çark
+          </button>
+          <button
+            onClick={() => setThemeEditorOpen(true)}
+            className="btn-ghost !px-1.5 !text-[10px]"
+            title="Tema editörü"
+          >
+            <Palette className="h-3.5 w-3.5" />
+            Tema
+          </button>
+        </div>
         <div className="flex gap-1.5">
           <button
             onClick={() => setSettingsOpen(true)}

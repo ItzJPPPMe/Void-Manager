@@ -1,6 +1,6 @@
 [package]
 name = "void-skin-manager"
-version = "2.0.0"
+version = "3.0.0"
 edition = "2021"
 authors = ["VOID"]
 description = "League of Legends custom skin & mod manager built with Tauri 2 and React"

@@ -27,6 +27,15 @@ export interface AppSettings {
   skinNameLanguage: SkinNameLanguage;
   gridDensity: GridDensity;
   checkUpdateOnLaunch: boolean;
+  customAccent: string | null;
+  glowIntensity: number;
+  uiRadius: UiRadius;
+  animationsEnabled: boolean;
+  animationSpeed: number;
+  smartSuggestions: boolean;
+  fuzzySearch: boolean;
+  bulkModOperations: boolean;
+  smartSync: boolean;
 }
 
 export type DataSourceMode = "auto" | "online" | "lcu";
@@ -40,6 +49,8 @@ export type ThemeAccent = "cyan" | "violet" | "magenta" | "lime";
 export type SkinNameLanguage = "tr" | "en";
 
 export type GridDensity = "compact" | "comfortable" | "large";
+
+export type UiRadius = "sharp" | "soft" | "round";
 
 export interface SyncProgress {
   repositoryId: SkinSourceType | "catalog";
@@ -125,4 +136,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   skinNameLanguage: "tr",
   gridDensity: "comfortable",
   checkUpdateOnLaunch: true,
+  customAccent: null,
+  glowIntensity: 55,
+  uiRadius: "soft",
+  animationsEnabled: true,
+  animationSpeed: 1,
+  smartSuggestions: true,
+  fuzzySearch: true,
+  bulkModOperations: true,
+  smartSync: true,
 };

@@ -29,10 +29,24 @@ Akış:
 
 ## Özellikler
 
+### Katalog ve senkronizasyon
+
 - **Türkçe kostüm adları**: senkronizasyon sonunda isimler Data Dragon `tr_TR` verisiyle yerelleştirilir; LTK'ya gönderilen mod adı da Türkçe kaydedilir.
 - Birden fazla topluluk kaynağından hibrit katalog taraması, çakışmalarda ağırlığa göre çözümleme.
+- **Akıllı senkronizasyon (Smart Sync)**: her kaynağın içerik parmak izi hesaplanır; değişmeyen kaynaklar yeniden işlenmek yerine önbellekten yeniden kullanılır. Senkronizasyon sonunda hangi kaynağın değiştiği, hangisinin önbellekten geldiği bildirilir.
+- **Bulanık arama (Fuzzy)**: yazarken harf hatası yapsan bile sonuç bulunur; Türkçe karakterler (ı/İ, ş/ş, ğ/ğ, ü/ü, ö/ö, ç/ç) normalize edilir. `Gelişmiş` ayarlarından kapatılabilir.
+
+### Koleksiyon deneyimi
+
 - İki ayrı menü: **Kostümler** (katalogdan kostüm seç ve gönder) ve **Modlar** (LTK kütüphanesini yönet).
-- **Komut paleti** (`Ctrl+K`): şampiyon, kostüm ve eylemleri tek yerden arayıp çalıştır.
+- **Açılış ekranı (Boot Screen)**: uygulama açılışında logo animasyonu ve ilerleme göstergesi.
+- **Komut paleti** (`Ctrl+K`): şampiyon, kostüm ve eylemleri tek yerden arayıp çalıştır. Pano, Skin Roulette, tema editörü ve bildirim merkezi de paletten açılır.
+- **Sana öneriler**: son bakılanlara, favorilere ve nadirliğe göre kişiselleştirilmiş kostüm şeridi.
+- **Koleksiyon panosu** (`B`): toplam kostüm, favori, hazır, chroma oranı, nadirlik dağılımı ve şampiyon sıralaması.
+- **Skin Roulette** (`L`): çarkı çevirip rastgele kostüm seç; seçilen kostümün sinematik önizlemesini aç.
+- **Sinematik önizleme**: tam ekran splash, chroma galerisi ve kaynak bilgisi.
+- **Çoklu seçim**: birden fazla kostüm seçip toplu favori işlemi uygula.
+- **Sanal kaydırma**: yüzlerce kostümde performanslı ızgara.
 - **Kostüm detay modalı**: büyük splash, tüm chroma galerisi, kaynaklar, favori ve LTK'ya gönderme; `←` / `→` ile kostümler arasında gezinme.
 - **Görsel ve paket araçları**: detaydan splash görselini diske kaydet, paket bağlantısını kopyala veya paketi indirip doğrudan LTK kütüphanesine aktar (çevrimdışı kurulum için).
 - **Şampiyon galerisi**: seçili şampiyonun tüm kostümlerini görsel ızgarada gez (`G`).
@@ -42,18 +56,33 @@ Akış:
 - **Kostüm adı dili**: Türkçe veya İngilizce adlar arasında seçim; değişiklik otomatik senkronla uygulanır.
 - **Koleksiyon yedeği**: favorileri ve son görüntülenenleri JSON olarak dışa/içe aktarma.
 - **Sürpriz kostüm**: filtrelenen havuzdan rastgele seçim (`R` kısayolu).
-- **Tema vurgu rengi**: cyan, violet, magenta ve lime arasında anında geçiş; seçim kalıcı.
+
+### Tema ve arayüz
+
+- **Tema editörü** (`Ctrl+Shift+T`): hazır vurgu renkleri (cyan, violet, magenta, lime) veya özel hex renk, parlama yoğunluğu, köşe yuvarlaklığı (keskin / yumuşak / yuvarlak) ve animasyon hızı ayarı.
+- **Bildirim merkezi** (`N`): uygulama içi bildirim geçmişi, okunmamış sayacı ve zil rozeti.
+- **Gelişmiş animasyonlar**: açılış, geçiş, shimmer ve açığa çıkma efektleri; tamamen kapatılabilir ve hızı ayarlanabilir.
+- Neon karanlık tema, çerçevesiz pencere.
+
+### Mod yönetimi
+
 - **Modlar** ekranı: LTK kütüphanesindeki yüklü modları ad, sürüm, yazar ve şampiyon bilgisiyle listeler; yerel `.fantome` / `.modpkg` / `.zip` paketlerini tek tuşla veya **sürükle-bırak** ile LTK'ya aktarır.
 - **Mod yönetimi**: modları doğrudan etkinleştir / devre dışı bırak (LTK `library.json` yedeklenerek yazılır), mod detay çekmecesinden klasörü aç.
+- **Toplu işlemler**: tüm modları tek tıkla etkinleştir veya kapat.
+- **Kütüphane yedekleme**: `library.json` dosyasını istediğin konuma yedekle, listelenen yedeklerden geri yükle.
+- **Mod sağlık kontrolü**: eksik klasör, boş klasör, okunamayan `mod.config.json`, yinelenen kimlik ve eksik biçim bilgisi gibi sorunları tespit eder.
+- **Kütüphane gezgini**: LTK klasörünü dosya dosya gez, dosyaları doğrudan aç.
 - **Patcher yönetimi**: VOID üzerinden LTK'yı Windows açılışında başlatma ve sessiz mod (tepside çalış + patcher'ı otomatik başlat) tek anahtarla ayarlanır.
+
+### Sistem
+
 - **Özel başlık çubuğu**: sürüklenebilir pencere, küçült / büyüt / kapat düğmeleri; pencere boyutu ve konumu hatırlanır.
 - **Güncelleme denetimi** (açılışta denetim anahtarı dahil) ve **istatistik paneli** (koleksiyon, kaynak ve nadirlik dağılımı, mod özeti, önbellek boyutu).
-- **Klavye kısayolları**: `Ctrl+K` palet, `Ctrl+,` ayarlar, `Ctrl+1/2` görünüm, `F` favori, `R` rastgele, `G` galeri, `/` arama, `?` yardım.
+- **Klavye kısayolları**: `Ctrl+K` palet, `Ctrl+,` ayarlar, `Ctrl+Shift+T` tema, `Ctrl+1/2` görünüm, `F` favori, `R` rastgele, `G` galeri, `B` pano, `L` çark, `N` bildirimler, `/` arama, `?` yardım.
 - Şampiyon ve kostüm arama, favoriler, kaynak / hazır durumuna göre filtreleme.
 - Çalışan oyundan yerel (LCU) veri kaynağı; LCU yoksa otomatik olarak çevrimiçi (CommunityDragon) kaynağa düşer.
 - Görsel önbelleği (disk / bellek), TTL ayarı ve tek tuşla temizleme.
 - LTK Manager durum takibi: kurulu mu, **patcher çalışıyor mu** (durum çubuğunda canlı rozet).
-- Neon karanlık tema, çerçevesiz pencere.
 
 ---
 
@@ -145,12 +174,14 @@ Hibrit mod açıkken tüm etkin kaynaklar birleştirilir; aynı kostüm birden f
 │   ├── components/
 │   │   ├── champion/         # şampiyon listesi ve arama
 │   │   ├── common/           # ortak (toast, ikon, modal) bileşenler
-│   │   ├── layout/           # başlık, durum çubuğu
+│   │   ├── layout/           # başlık, durum çubuğu, boot ekranı, bildirim merkezi
+│   │   ├── modals/           # pano, roulette, tema editörü, sinematik, gezgin
 │   │   ├── mods/             # Modlar ekranı (LTK kütüphanesi + patcher kontrolü)
 │   │   ├── panel/            # seçili kostüm paneli
 │   │   ├── settings/         # ayarlar ekranı
-│   │   └── skins/            # kostüm kartları
+│   │   └── skins/            # kostüm kartları, sanal ızgara, öneriler
 │   ├── hooks/                # veri kaynakları, senkronizasyon kancaları
+│   ├── lib/                  # tema, fuzzy arama, öneriler, senkronizasyon önbelleği
 │   ├── services/             # syncService, ltkManager, görsel yükleyici
 │   ├── store/                # zustand store'ları
 │   ├── types/                # tipler ve varsayılan kaynaklar
@@ -168,6 +199,11 @@ Rust tarafındaki ana komutlar (`src-tauri/src/lib.rs`):
 | `download_to_cache`, `cache_resolve`, `clear_image_cache` | Görsel önbelleği |
 | `ltk_manager_status`, `ltk_install`, `ltk_open`, `ltk_import_file` | LTK Manager entegrasyonu |
 | `ltk_library`, `ltk_patcher_config`, `ltk_set_autostart`, `ltk_set_patcher_flags`, `ltk_launch` | LTK kütüphanesi ve patcher yönetimi |
+| `ltk_set_mod_enabled`, `ltk_set_mods_bulk` | Mod etkin/pasif yönetimi (toplu) |
+| `ltk_list_backups`, `ltk_backup_library`, `ltk_restore_library` | Kütüphane yedekleme ve geri yükleme |
+| `ltk_mod_health` | Mod sağlık kontrolü (eksik klasör, boş klasör, okunamayan config) |
+| `list_dir_entries`, `open_folder` | Kütüphane gezgini |
+| `app_info` | Uygulama sürümü / platform bilgisi |
 | `extract_mod_package`, `apply_mod`, `revert_last_patch` | Paket inceleme ve yedekleme |
 
 ---

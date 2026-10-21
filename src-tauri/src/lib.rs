@@ -928,6 +928,325 @@ async fn ltk_set_mod_enabled(mod_id: String, enabled: bool) -> Result<LtkLibrary
     Ok(library)
 }
 
+#[tauri::command]
+async fn ltk_set_mods_bulk(
+    mod_ids: Vec<String>,
+    enabled: bool,
+) -> Result<LtkLibrary, String> {
+    if mod_ids.is_empty() {
+        return Err("hiçbir mod seçilmedi".into());
+    }
+    if mod_ids.len() > 500 {
+        return Err("çok fazla mod seçildi".into());
+    }
+    let base = ltk_data_dir().ok_or_else(|| "APPDATA bulunamadı".to_string())?;
+    let path = base.join("library.json");
+    let raw = fs::read_to_string(&path).map_err(|_| {
+        "LTK kütüphanesi okunamadı. LTK Manager'ı bir kez çalıştırıp tekrar deneyin.".to_string()
+    })?;
+    let mut json: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("kütüphane çözümlenemedi: {e}"))?;
+
+    let mut changed = 0usize;
+    let mut failed: Vec<String> = Vec::new();
+    for mod_id in &mod_ids {
+        match set_mod_enabled_in_json(&mut json, mod_id, enabled) {
+            Ok(()) => changed += 1,
+            Err(_) => failed.push(mod_id.clone()),
+        }
+    }
+    if changed == 0 {
+        return Err("seçilen modların hiçbiri güncellenemedi".into());
+    }
+
+    let bytes = serde_json::to_vec_pretty(&json).map_err(|e| e.to_string())?;
+    let backup = base.join("library.json.void-backup");
+    let _ = fs::copy(&path, &backup);
+    write_atomic(&path, &bytes).map_err(|e| format!("kütüphane yazılamadı: {e}"))?;
+
+    let mut library = build_library(&json, &base.join("mods"));
+    library.dir = Some(base.to_string_lossy().to_string());
+    Ok(library)
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryBackup {
+    pub path: String,
+    pub name: String,
+    pub size_kb: u64,
+    pub created_at: u64,
+}
+
+fn collect_backups(dir: &Path) -> Vec<LibraryBackup> {
+    let mut out: Vec<LibraryBackup> = Vec::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !name.starts_with("library") {
+            continue;
+        }
+        if !name.ends_with(".json") && !name.ends_with(".void-backup") {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else { continue };
+        let created_at = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        out.push(LibraryBackup {
+            path: path.to_string_lossy().to_string(),
+            name: name.to_string(),
+            size_kb: meta.len() / 1024,
+            created_at,
+        });
+    }
+    out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    out
+}
+
+#[tauri::command]
+async fn ltk_list_backups() -> Result<Vec<LibraryBackup>, String> {
+    let base = ltk_data_dir().ok_or_else(|| "APPDATA bulunamadı".to_string())?;
+    Ok(collect_backups(&base))
+}
+
+#[tauri::command]
+async fn ltk_backup_library(destination: String) -> Result<String, String> {
+    if destination.trim().is_empty() {
+        return Err("hedef yol boş olamaz".into());
+    }
+    let base = ltk_data_dir().ok_or_else(|| "APPDATA bulunamadı".to_string())?;
+    let source = base.join("library.json");
+    if !source.is_file() {
+        return Err("LTK kütüphanesi bulunamadı".into());
+    }
+    let target = PathBuf::from(&destination);
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("hedef klasör oluşturulamadı: {e}"))?;
+    }
+    fs::copy(&source, &target).map_err(|e| format!("yedek kopyalanamadı: {e}"))?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn ltk_restore_library(source: String) -> Result<LtkLibrary, String> {
+    if source.trim().is_empty() {
+        return Err("kaynak yol boş olamaz".into());
+    }
+    let base = ltk_data_dir().ok_or_else(|| "APPDATA bulunamadı".to_string())?;
+    let raw = fs::read_to_string(&source).map_err(|e| format!("yedek okunamadı: {e}"))?;
+    let json: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("yedek geçersiz: {e}"))?;
+    if json.get("mods").and_then(|v| v.as_array()).is_none() {
+        return Err("yedek dosyası LTK kütüphane biçiminde değil".into());
+    }
+    let bytes = serde_json::to_vec_pretty(&json).map_err(|e| e.to_string())?;
+    let target = base.join("library.json");
+    let safety = base.join("library.json.void-backup");
+    let _ = fs::copy(&target, &safety);
+    write_atomic(&target, &bytes).map_err(|e| format!("kütüphane yazılamadı: {e}"))?;
+    let mut library = build_library(&json, &base.join("mods"));
+    library.dir = Some(base.to_string_lossy().to_string());
+    Ok(library)
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DirEntryInfo {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size_kb: u64,
+}
+
+#[tauri::command]
+async fn list_dir_entries(path: String) -> Result<Vec<DirEntryInfo>, String> {
+    let base = PathBuf::from(&path);
+    if !base.is_dir() {
+        return Err("klasör bulunamadı".into());
+    }
+    let entries = fs::read_dir(&base).map_err(|e| format!("klasör okunamadı: {e}"))?;
+    let mut out: Vec<DirEntryInfo> = Vec::new();
+    for entry in entries.flatten() {
+        let Ok(meta) = entry.metadata() else { continue };
+        let name = entry.file_name().to_string_lossy().to_string();
+        out.push(DirEntryInfo {
+            path: entry.path().to_string_lossy().to_string(),
+            is_dir: meta.is_dir(),
+            size_kb: if meta.is_dir() { 0 } else { meta.len() / 1024 },
+            name,
+        });
+    }
+    out.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    Ok(out)
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AppInfo {
+    pub version: String,
+    pub name: String,
+    pub tauri_version: String,
+    pub os: String,
+    pub arch: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ModHealthIssue {
+    pub mod_id: String,
+    pub mod_name: String,
+    pub severity: String,
+    pub code: String,
+    pub message: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ModHealthReport {
+    pub issues: Vec<ModHealthIssue>,
+    pub checked: usize,
+    pub healthy: usize,
+}
+
+fn mod_health_issues(
+    json: &serde_json::Value,
+    mods_dir: &Path,
+) -> Vec<ModHealthIssue> {
+    let mut issues: Vec<ModHealthIssue> = Vec::new();
+    let Some(list) = json.get("mods").and_then(|v| v.as_array()) else {
+        return issues;
+    };
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for entry in list {
+        let id = entry
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        if id.is_empty() {
+            continue;
+        }
+        let slug = entry.get("slug").and_then(|v| v.as_str()).unwrap_or(&id);
+        let display = entry
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| title_case_slug(slug));
+        let path = mods_dir.join(slug);
+        let fallback = mods_dir.join(&id);
+
+        if !seen.insert(id.clone()) {
+            issues.push(ModHealthIssue {
+                mod_id: id.clone(),
+                mod_name: display.clone(),
+                severity: "error".into(),
+                code: "duplicate_id".into(),
+                message: "Kütüphanede birden fazla kayıt aynı kimliği kullanıyor.".into(),
+            });
+            continue;
+        }
+
+        if !path.exists() && !fallback.exists() {
+            issues.push(ModHealthIssue {
+                mod_id: id.clone(),
+                mod_name: display.clone(),
+                severity: "error".into(),
+                code: "missing_folder".into(),
+                message: "Mod klasörü diskte bulunamadı.".into(),
+            });
+            continue;
+        }
+
+        let mod_dir = if path.exists() { &path } else { &fallback };
+        if read_mod_config(mod_dir).is_none() {
+            issues.push(ModHealthIssue {
+                mod_id: id.clone(),
+                mod_name: display.clone(),
+                severity: "warning".into(),
+                code: "missing_config".into(),
+                message: "mod.config.json okunamadı, küçük resim yüklenemeyebilir.".into(),
+            });
+        }
+
+        if entry.get("format").and_then(|v| v.as_str()).is_none() {
+            issues.push(ModHealthIssue {
+                mod_id: id.clone(),
+                mod_name: display.clone(),
+                severity: "info".into(),
+                code: "missing_format".into(),
+                message: "Paket biçimi kayıtlı değil.".into(),
+            });
+        }
+
+        let total = fs::read_dir(mod_dir)
+            .map(|entries| entries.flatten().count())
+            .unwrap_or(0);
+        if total == 0 {
+            issues.push(ModHealthIssue {
+                mod_id: id.clone(),
+                mod_name: display.clone(),
+                severity: "warning".into(),
+                code: "empty_folder".into(),
+                message: "Mod klasörü boş.".into(),
+            });
+        }
+    }
+
+    issues
+}
+
+#[tauri::command]
+async fn ltk_mod_health() -> Result<ModHealthReport, String> {
+    let base = ltk_data_dir().ok_or_else(|| "APPDATA bulunamadı".to_string())?;
+    let raw = fs::read_to_string(base.join("library.json")).map_err(|_| {
+        "LTK kütüphanesi okunamadı. LTK Manager'ı bir kez çalıştırıp tekrar deneyin.".to_string()
+    })?;
+    let json: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("kütüphane çözümlenemedi: {e}"))?;
+    let issues = mod_health_issues(&json, &base.join("mods"));
+    let broken = issues
+        .iter()
+        .filter(|i| i.severity == "error")
+        .map(|i| i.mod_id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let checked = json
+        .get("mods")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let healthy = checked.saturating_sub(broken.len());
+    Ok(ModHealthReport {
+        issues,
+        checked,
+        healthy,
+    })
+}
+
+#[tauri::command]
+async fn app_info() -> AppInfo {
+    AppInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        name: env!("CARGO_PKG_NAME").to_string(),
+        tauri_version: tauri::VERSION.to_string(),
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+    }
+}
+
 fn autostart_registered() -> bool {
     reg_query(
         "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
@@ -1507,6 +1826,13 @@ pub fn run() {
             ltk_import_file,
             ltk_library,
             ltk_set_mod_enabled,
+            ltk_set_mods_bulk,
+            ltk_list_backups,
+            ltk_backup_library,
+            ltk_restore_library,
+            list_dir_entries,
+            app_info,
+            ltk_mod_health,
             ltk_patcher_config,
             ltk_set_autostart,
             ltk_set_patcher_flags,
@@ -1519,8 +1845,9 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_library, cache_dir_stats, hive_of, load_text_file, now_ms, pct_encode,
-        reg_query, save_text_file, set_mod_enabled_in_json, title_case_slug,
+        build_library, cache_dir_stats, collect_backups, hive_of, list_dir_entries,
+        load_text_file, mod_health_issues, now_ms, pct_encode, reg_query, save_text_file,
+        set_mod_enabled_in_json, title_case_slug,
     };
     use std::path::Path;
 
@@ -1751,5 +2078,117 @@ mod tests {
         assert_eq!(empty.mb, 0.0);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn toplu_mod_guncellemesi_modlari_toplu_isler() {
+        let mut json = sample_library();
+        for id in ["m1", "m2"] {
+            set_mod_enabled_in_json(&mut json, id, true).expect("eklenemedi");
+        }
+        assert_eq!(enabled_ids(&json).len(), 2);
+
+        set_mod_enabled_in_json(&mut json, "m1", false).expect("cikarilamadi");
+        assert_eq!(enabled_ids(&json), vec!["m2"]);
+    }
+
+    #[tokio::test]
+    async fn klasor_icerigi_siralanir() {
+        let dir = std::env::temp_dir().join(format!("void-dir-{}", now_ms()));
+        std::fs::create_dir_all(dir.join("alt")).expect("dizin olusturulamadi");
+        std::fs::write(dir.join("b.txt"), b"x").expect("yazilamadi");
+        std::fs::write(dir.join("a.txt"), b"xx").expect("yazilamadi");
+
+        let entries = list_dir_entries(dir.to_string_lossy().to_string())
+            .await
+            .expect("liste alinamadi");
+        assert_eq!(entries.len(), 3);
+        assert!(entries[0].is_dir);
+        assert_eq!(entries[1].name, "a.txt");
+        assert_eq!(entries[2].size_kb, 0);
+
+        assert!(list_dir_entries(dir.join("yok").to_string_lossy().to_string())
+            .await
+            .is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn yedek_listesi_yalnzca_kutuphane_dosyalarini_icerir() {
+        let dir = std::env::temp_dir().join(format!("void-bk-{}", now_ms()));
+        std::fs::create_dir_all(&dir).expect("dizin olusturulamadi");
+        std::fs::write(dir.join("library.json"), b"{}").expect("yazilamadi");
+        std::fs::write(dir.join("library.json.void-backup"), b"{}").expect("yazilamadi");
+        std::fs::write(dir.join("baska.txt"), b"x").expect("yazilamadi");
+
+        let backups = collect_backups(&dir);
+        assert_eq!(backups.len(), 2);
+        assert!(backups.iter().all(|b| b.name.starts_with("library")));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mod_sagligi_klasör_ve_kayit_sorunlarini_bulur() {
+        let dir = std::env::temp_dir().join(format!("void-health-{}", now_ms()));
+        let mods_dir = dir.join("mods");
+        std::fs::create_dir_all(mods_dir.join("iyi-mod")).expect("dizin olusturulamadi");
+        std::fs::write(
+            mods_dir.join("iyi-mod").join("mod.config.json"),
+            br#"{"display_name":"Iyi Mod","version":"1.0.0"}"#,
+        )
+        .expect("yazilamadi");
+        std::fs::create_dir_all(mods_dir.join("bos-mod")).expect("dizin olusturulamadi");
+        std::fs::create_dir_all(mods_dir.join("config-siz-mod")).expect("dizin olusturulamadi");
+        std::fs::write(
+            mods_dir.join("config-siz-mod").join("payload.bin"),
+            b"x",
+        )
+        .expect("yazilamadi");
+
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{
+                "mods": [
+                    { "id": "m1", "slug": "iyi-mod", "format": "fantome" },
+                    { "id": "m2", "slug": "bos-mod", "format": "fantome" },
+                    { "id": "m3", "slug": "config-siz-mod", "format": "modpkg" },
+                    { "id": "m4", "slug": "yok-mod", "format": "fantome" }
+                ]
+            }"#,
+        )
+        .expect("ornek kutuphane cozulemedi");
+
+        let issues = mod_health_issues(&json, &mods_dir);
+        let has = |code: &str| issues.iter().any(|i| i.code == code);
+
+        assert!(has("missing_folder"));
+        assert!(has("empty_folder"));
+        assert!(has("missing_config"));
+        assert_eq!(
+            issues.iter().filter(|i| i.severity == "error").count(),
+            1
+        );
+        assert!(issues
+            .iter()
+            .all(|i| !i.mod_id.is_empty() && !i.message.is_empty()));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mod_sagligi_tekrar_kimligi_esas_alan_olarak_bildirir() {
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{
+                "mods": [
+                    { "id": "m1", "slug": "a" },
+                    { "id": "m1", "slug": "b" }
+                ]
+            }"#,
+        )
+        .expect("ornek kutuphane cozulemedi");
+
+        let issues = mod_health_issues(&json, Path::new("C:/yok"));
+        assert!(issues.iter().any(|i| i.code == "duplicate_id"));
     }
 }

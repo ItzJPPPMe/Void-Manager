@@ -1,4 +1,4 @@
-import { Heart, Check, Palette, Maximize2 } from "lucide-react";
+import { Heart, Check, Palette, Maximize2, CheckSquare } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
 import { useAppStore } from "@/store/appStore";
@@ -12,29 +12,49 @@ function primarySource(skin: Skin): SkinSourceType | null {
 
 interface SkinCardProps {
   skin: Skin;
+  index?: number;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-export function SkinCard({ skin }: SkinCardProps) {
+export function SkinCard({
+  skin,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+}: SkinCardProps) {
   const selectSkin = useChampionStore((s) => s.selectSkin);
   const selectedSkinId = useChampionStore((s) => s.selectedSkinId);
   const toggleFavorite = useChampionStore((s) => s.toggleFavorite);
   const setDetailSkinId = useAppStore((s) => s.setDetailSkinId);
+  const setCinematicSkinId = useAppStore((s) => s.setCinematicSkinId);
 
   const isSelected = selectedSkinId === skin.id;
   const chromaCount = skin.chromas.length;
   const source = primarySource(skin);
   const rarity = RARITY_BADGE[skin.rarity];
 
+  const handleClick = () => {
+    if (selectable) {
+      onToggleSelect?.();
+      return;
+    }
+    selectSkin(skin.id);
+  };
+
   return (
     <article
-      onClick={() => selectSkin(skin.id)}
+      onClick={handleClick}
       onDoubleClick={() => setDetailSkinId(skin.id)}
       className={clsx(
-        "group relative cursor-pointer overflow-hidden rounded-xl border bg-void-850 shadow-card transition duration-200",
+        "group relative cursor-pointer overflow-hidden border bg-void-850 shadow-card transition duration-200",
         "[content-visibility:auto] [contain-intrinsic-size:auto_220px]",
-        isSelected
-          ? "border-neon-cyan/70 shadow-neon ring-1 ring-neon-cyan/40"
-          : "border-white/5 hover:-translate-y-0.5 hover:border-neon-cyan/40",
+        selected
+          ? "border-neon-lime/70 shadow-neon ring-1 ring-neon-lime/40"
+          : isSelected
+            ? "border-neon-cyan/70 shadow-neon ring-1 ring-neon-cyan/40"
+            : "border-white/5 hover:-translate-y-0.5 hover:border-neon-cyan/40",
       )}
     >
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-void-800">
@@ -74,33 +94,60 @@ export function SkinCard({ skin }: SkinCardProps) {
           )}
         </div>
 
-        <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setDetailSkinId(skin.id);
-            }}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-neon-cyan/50 hover:text-neon-cyan"
-            title="Detayları aç"
-          >
-            <Maximize2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavorite(skin.id);
-            }}
-            className={clsx(
-              "flex h-8 w-8 items-center justify-center rounded-lg border backdrop-blur-md transition",
-              skin.favorite
-                ? "border-rose-400/50 bg-rose-500/20 text-rose-400"
-                : "border-white/15 bg-black/40 text-slate-300 hover:border-rose-400/50 hover:text-rose-400",
-            )}
-            title="Favorilere ekle"
-          >
-            <Heart className={clsx("h-4 w-4", skin.favorite && "fill-current")} />
-          </button>
-        </div>
+        {selectable && (
+          <div className="absolute right-2 top-2">
+            <span
+              className={clsx(
+                "flex h-8 w-8 items-center justify-center rounded-lg border backdrop-blur-md transition",
+                selected
+                  ? "border-neon-lime/70 bg-neon-lime/20 text-neon-lime"
+                  : "border-white/20 bg-black/40 text-slate-300",
+              )}
+            >
+              <CheckSquare className="h-4 w-4" />
+            </span>
+          </div>
+        )}
+
+        {!selectable && (
+          <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCinematicSkinId(skin.id);
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-neon-violet/50 hover:text-neon-violet"
+              title="Sinematik önizleme"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setDetailSkinId(skin.id);
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-neon-cyan/50 hover:text-neon-cyan"
+              title="Detayları aç"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(skin.id);
+              }}
+              className={clsx(
+                "flex h-8 w-8 items-center justify-center rounded-lg border backdrop-blur-md transition",
+                skin.favorite
+                  ? "border-rose-400/50 bg-rose-500/20 text-rose-400"
+                  : "border-white/15 bg-black/40 text-slate-300 hover:border-rose-400/50 hover:text-rose-400",
+              )}
+              title="Favorilere ekle"
+            >
+              <Heart className={clsx("h-4 w-4", skin.favorite && "fill-current")} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="space-y-1 p-3">

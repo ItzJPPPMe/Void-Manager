@@ -17,18 +17,24 @@ import {
   Clock,
   FileArchive,
   MousePointerClick,
+  Stethoscope,
+  FolderSearch,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAppStore } from "@/store/appStore";
+import { useSettingsStore } from "@/store/settingsStore";
+import { ModOpsBar } from "@/components/mods/ModOpsBar";
 import {
   ltkImportFile,
   ltkLaunch,
+  ltkModHealth,
   ltkOpen,
   ltkSetAutostart,
   ltkSetModEnabled,
   ltkSetPatcherFlags,
   openFolder,
   type LtkMod,
+  type ModHealthReport,
 } from "@/services/ltkManager";
 
 const MOD_EXTENSIONS = ["fantome", "modpkg", "zip"];
@@ -312,6 +318,8 @@ export function ModsView() {
   const patcher = useAppStore((s) => s.patcher);
   const setPatcher = useAppStore((s) => s.setPatcher);
   const showToast = useAppStore((s) => s.showToast);
+  const setLibraryExplorerOpen = useAppStore((s) => s.setLibraryExplorerOpen);
+  const bulkEnabled = useSettingsStore((s) => s.settings.bulkModOperations);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ModFilter>("all");
   const [importing, setImporting] = useState(false);
@@ -319,6 +327,28 @@ export function ModsView() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [health, setHealth] = useState<ModHealthReport | null>(null);
+  const [healthBusy, setHealthBusy] = useState(false);
+
+  const runHealthCheck = useCallback(async () => {
+    setHealthBusy(true);
+    try {
+      const report = await ltkModHealth();
+      setHealth(report);
+      showToast(
+        `${report.checked} mod kontrol edildi, ${report.issues.length} sorun bulundu`,
+        report.issues.length === 0 ? "success" : "info",
+      );
+    } catch (e) {
+      setHealth(null);
+      showToast(
+        typeof e === "string" ? e : "Sağlık kontrolü çalıştırılamadı",
+        "error",
+      );
+    } finally {
+      setHealthBusy(false);
+    }
+  }, [showToast]);
 
   const importPaths = useCallback(
     async (paths: string[]) => {
@@ -557,6 +587,76 @@ export function ModsView() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        {bulkEnabled && <ModOpsBar library={library} />}
+
+        <div className="mb-5 rounded-2xl border border-white/10 bg-void-800/40 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="mr-1 flex items-center gap-2">
+              <Stethoscope className="h-4 w-4 text-neon-lime" />
+              <h3 className="font-display text-sm font-bold uppercase tracking-widest text-neon-lime/90">
+                Mod Sağlık Kontrolü
+              </h3>
+            </div>
+            {health && (
+              <span className="rounded-md bg-white/5 px-2 py-0.5 text-[11px] font-mono text-slate-400">
+                {health.healthy}/{health.checked} sağlıklı
+              </span>
+            )}
+            <button
+              onClick={() => void runHealthCheck()}
+              disabled={healthBusy}
+              className="btn-ghost ml-auto !py-1.5 disabled:opacity-40"
+            >
+              <Stethoscope
+                className={clsx("h-3.5 w-3.5", healthBusy && "animate-pulse")}
+              />
+              Kontrol Et
+            </button>
+            <button
+              onClick={() => {
+                setLibraryExplorerOpen(true);
+              }}
+              className="btn-ghost !py-1.5"
+            >
+              <FolderSearch className="h-3.5 w-3.5 text-neon-violet" />
+              Kütüphane Gezgini
+            </button>
+          </div>
+
+          {health && health.issues.length === 0 && (
+            <p className="mt-3 flex items-center gap-2 text-xs text-neon-lime">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Tüm modlar sağlıklı görünüyor.
+            </p>
+          )}
+
+          {health && health.issues.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {health.issues.map((issue, i) => (
+                <div
+                  key={`${issue.modId}-${issue.code}-${i}`}
+                  className={clsx(
+                    "flex items-start gap-2.5 rounded-lg px-3 py-2 text-[11px]",
+                    issue.severity === "error"
+                      ? "bg-rose-500/10 text-rose-200"
+                      : issue.severity === "warning"
+                        ? "bg-amber-500/10 text-amber-200"
+                        : "bg-white/5 text-slate-300",
+                  )}
+                >
+                  <span className="mt-0.5 shrink-0 font-mono uppercase opacity-70">
+                    {issue.severity}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold">{issue.modName}</span> —{" "}
+                    {issue.message}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="mb-5 rounded-2xl border border-white/10 bg-void-800/40 p-4">
           <div className="flex items-center gap-2">
             <Cpu className="h-4 w-4 text-neon-violet" />

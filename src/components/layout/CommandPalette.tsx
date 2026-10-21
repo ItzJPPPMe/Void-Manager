@@ -15,12 +15,16 @@ import {
   CheckCircle2,
   ArrowRight,
   Images,
+  Dices,
+  Palette,
+  Bell,
 } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
 import { useCollectionStore } from "@/store/collectionStore";
 import { useAppStore } from "@/store/appStore";
 import { useSettingsStore } from "@/store/settingsStore";
+import { useNotificationStore } from "@/store/notificationStore";
 import { useRepositories } from "@/hooks/useRepositories";
 import { useImageCache } from "@/hooks/useImageCache";
 import { getImageLoader } from "@/services/imageLoader";
@@ -57,6 +61,10 @@ export function CommandPalette() {
   const setShortcutsOpen = useAppStore((s) => s.setShortcutsOpen);
   const setUpdateInfo = useAppStore((s) => s.setUpdateInfo);
   const setGalleryChampionId = useAppStore((s) => s.setGalleryChampionId);
+  const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
+  const setRouletteOpen = useAppStore((s) => s.setRouletteOpen);
+  const setThemeEditorOpen = useAppStore((s) => s.setThemeEditorOpen);
+  const setNotificationPanelOpen = useNotificationStore((s) => s.setPanelOpen);
   const showToast = useAppStore((s) => s.showToast);
 
   const champions = useChampionStore((s) => s.champions);
@@ -283,6 +291,49 @@ export function CommandPalette() {
         },
       },
       {
+        key: "act-dashboard",
+        group: "Eylemler",
+        label: "Koleksiyon panosu",
+        hint: "İstatistikler ve dağılım",
+        icon: <BarChart3 className="h-4 w-4 text-neon-violet" />,
+        run: () => {
+          setDashboardOpen(true);
+          close();
+        },
+      },
+      {
+        key: "act-roulette",
+        group: "Eylemler",
+        label: "Skin Roulette",
+        hint: "Çarkı çevir",
+        icon: <Dices className="h-4 w-4 text-neon-magenta" />,
+        run: () => {
+          setRouletteOpen(true);
+          close();
+        },
+      },
+      {
+        key: "act-theme",
+        group: "Eylemler",
+        label: "Tema editörü",
+        hint: "Renk, parlama, yuvarlaklık",
+        icon: <Palette className="h-4 w-4 text-neon-cyan" />,
+        run: () => {
+          setThemeEditorOpen(true);
+          close();
+        },
+      },
+      {
+        key: "act-notifications",
+        group: "Eylemler",
+        label: "Bildirim merkezi",
+        icon: <Bell className="h-4 w-4 text-neon-amber" />,
+        run: () => {
+          setNotificationPanelOpen(true);
+          close();
+        },
+      },
+      {
         key: "act-settings",
         group: "Eylemler",
         label: "Ayarlar",
@@ -327,6 +378,10 @@ export function CommandPalette() {
     selectSkin,
     setActiveFilter,
     sync,
+    setDashboardOpen,
+    setRouletteOpen,
+    setThemeEditorOpen,
+    setNotificationPanelOpen,
   ]);
 
   useEffect(() => {

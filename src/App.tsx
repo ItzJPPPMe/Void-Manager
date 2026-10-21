@@ -1,8 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { TitleBar } from "@/components/layout/TitleBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { StatusBar } from "@/components/layout/StatusBar";
+import { BootScreen } from "@/components/layout/BootScreen";
+import { NotificationCenter } from "@/components/layout/NotificationCenter";
 import { ChampionWorkspace } from "@/components/champion/ChampionWorkspace";
 import { ModsView } from "@/components/mods/ModsView";
 import { SelectedSkinPanel } from "@/components/panel/SelectedSkinPanel";
@@ -12,17 +14,28 @@ import { SkinDetailModal } from "@/components/skins/SkinDetailModal";
 import { ChampionGalleryModal } from "@/components/skins/ChampionGalleryModal";
 import { StatsModal } from "@/components/modals/StatsModal";
 import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
+import { ThemeEditor } from "@/components/modals/ThemeEditor";
+import { DashboardModal } from "@/components/modals/DashboardModal";
+import { RouletteModal } from "@/components/modals/RouletteModal";
+import { CinematicModal } from "@/components/modals/CinematicModal";
+import { LibraryExplorerModal } from "@/components/modals/LibraryExplorerModal";
 import { Toast } from "@/components/layout/Toast";
 import { useAppStore } from "@/store/appStore";
 import { useChampionStore } from "@/store/championStore";
 import { useSettingsStore } from "@/store/settingsStore";
+import { useNotificationStore } from "@/store/notificationStore";
 import { useRepositories } from "@/hooks/useRepositories";
 import { checkForUpdate } from "@/services/updateService";
+import { applyTheme } from "@/lib/theme";
 
 export default function App() {
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const statsOpen = useAppStore((s) => s.statsOpen);
   const shortcutsOpen = useAppStore((s) => s.shortcutsOpen);
+  const dashboardOpen = useAppStore((s) => s.dashboardOpen);
+  const rouletteOpen = useAppStore((s) => s.rouletteOpen);
+  const themeEditorOpen = useAppStore((s) => s.themeEditorOpen);
+  const libraryExplorerOpen = useAppStore((s) => s.libraryExplorerOpen);
   const view = useAppStore((s) => s.view);
   const setSystemStatus = useAppStore((s) => s.setSystemStatus);
   const refreshLtk = useAppStore((s) => s.refreshLtk);
@@ -30,15 +43,22 @@ export default function App() {
   const setUpdateInfo = useAppStore((s) => s.setUpdateInfo);
   const autoSyncOnLaunch = useSettingsStore((s) => s.settings.autoSyncOnLaunch);
   const lastSyncedAt = useSettingsStore((s) => s.sync.lastSyncedAt);
-  const themeAccent = useSettingsStore((s) => s.settings.themeAccent);
+  const settings = useSettingsStore((s) => s.settings);
   const checkUpdateOnLaunch = useSettingsStore(
     (s) => s.settings.checkUpdateOnLaunch,
   );
+  const setNotificationPanelOpen = useNotificationStore((s) => s.setPanelOpen);
   const { sync } = useRepositories();
+  const [booted, setBooted] = useState(false);
 
   useEffect(() => {
-    document.documentElement.dataset.accent = themeAccent;
-  }, [themeAccent]);
+    applyTheme(settings);
+  }, [settings]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setBooted(true), 900);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!checkUpdateOnLaunch) return;
@@ -68,6 +88,11 @@ export default function App() {
         app.setSettingsOpen(true);
         return;
       }
+      if (mod && e.shiftKey && e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        app.setThemeEditorOpen(true);
+        return;
+      }
       if (mod && (e.key === "1" || e.key === "2")) {
         e.preventDefault();
         app.setView(e.key === "1" ? "skins" : "mods");
@@ -79,6 +104,11 @@ export default function App() {
         app.settingsOpen ||
         app.statsOpen ||
         app.shortcutsOpen ||
+        app.dashboardOpen ||
+        app.rouletteOpen ||
+        app.themeEditorOpen ||
+        app.libraryExplorerOpen ||
+        app.cinematicSkinId !== null ||
         app.galleryChampionId !== null ||
         app.detailSkinId !== null;
       if (modalOpen) return;
@@ -102,6 +132,18 @@ export default function App() {
         app.setGalleryChampionId(champ.selectedChampionId);
         return;
       }
+      if (e.key.toLowerCase() === "b") {
+        app.setDashboardOpen(true);
+        return;
+      }
+      if (e.key.toLowerCase() === "l") {
+        app.setRouletteOpen(true);
+        return;
+      }
+      if (e.key.toLowerCase() === "n") {
+        setNotificationPanelOpen(true);
+        return;
+      }
       if (e.key.toLowerCase() === "r" && champ.skins.length > 0) {
         const pick = champ.skins[Math.floor(Math.random() * champ.skins.length)];
         app.setView("skins");
@@ -112,7 +154,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [setNotificationPanelOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,7 +207,14 @@ export default function App() {
       <ChampionGalleryModal />
       {statsOpen && <StatsModal />}
       {shortcutsOpen && <ShortcutsModal />}
+      {dashboardOpen && <DashboardModal />}
+      {rouletteOpen && <RouletteModal />}
+      {themeEditorOpen && <ThemeEditor />}
+      {libraryExplorerOpen && <LibraryExplorerModal />}
+      <CinematicModal />
+      <NotificationCenter />
       <Toast />
+      <BootScreen done={booted} />
     </div>
   );
 }

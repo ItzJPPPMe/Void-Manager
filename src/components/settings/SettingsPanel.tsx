@@ -16,6 +16,7 @@ import {
   Languages,
   Upload,
   FileJson,
+  Zap,
 } from "lucide-react";
 import clsx from "clsx";
 import { getVersion } from "@tauri-apps/api/app";
@@ -33,6 +34,8 @@ import {
   loadTextFile,
   ltkOpen,
   saveTextFile,
+  appInfo,
+  type AppInfo,
   type CacheStats,
 } from "@/services/ltkManager";
 import { getImageLoader } from "@/services/imageLoader";
@@ -101,9 +104,10 @@ export function SettingsPanel() {
   const updateInfo = useAppStore((s) => s.updateInfo);
   const setUpdateInfo = useAppStore((s) => s.setUpdateInfo);
   const [tab, setTab] = useState<
-    "repos" | "network" | "patch" | "theme" | "about"
+    "repos" | "network" | "patch" | "theme" | "advanced" | "about"
   >("repos");
   const [version, setVersion] = useState("—");
+  const [appMeta, setAppMeta] = useState<AppInfo | null>(null);
   const [checking, setChecking] = useState(false);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
@@ -119,6 +123,9 @@ export function SettingsPanel() {
     void imageCacheStats()
       .then(setCacheStats)
       .catch(() => setCacheStats(null));
+    void appInfo()
+      .then(setAppMeta)
+      .catch(() => setAppMeta(null));
   }, []);
 
   const refreshCacheStats = () => {
@@ -322,6 +329,7 @@ export function SettingsPanel() {
               ["network", "Görseller & Ağ"],
               ["patch", "Patch Motoru"],
               ["theme", "Tema"],
+              ["advanced", "Gelişmiş"],
               ["about", "Hakkında"],
             ] as const
           ).map(([id, label]) => (
@@ -832,6 +840,191 @@ export function SettingsPanel() {
                 gerektirir ve otomatik başlatılır. Mod adları her zaman Türkçe
                 kalır.
               </p>
+            </div>
+          )}
+
+          {tab === "advanced" && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-neon-violet" />
+                <h3 className="font-display text-sm font-semibold uppercase tracking-wide">
+                  Akıllı Özellikler
+                </h3>
+              </div>
+
+              <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Bulanık arama (Fuzzy)</p>
+                  <p className="text-xs text-slate-400">
+                    Yazarken hatalı yazsan bile sonuç bulur. "gnk" araması
+                    "Gangnam Style" kostümünü bulur.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.fuzzySearch}
+                  onChange={(e) => update({ fuzzySearch: e.target.checked })}
+                  className="h-4 w-4 accent-cyan-400"
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Akıllı öneriler</p>
+                  <p className="text-xs text-slate-400">
+                    Son bakılanlara ve favorilere göre kişiselleştirilmiş kostüm
+                    önerileri gösterir.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.smartSuggestions}
+                  onChange={(e) => update({ smartSuggestions: e.target.checked })}
+                  className="h-4 w-4 accent-cyan-400"
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Akıllı senkronizasyon</p>
+                  <p className="text-xs text-slate-400">
+                    Değişmeyen kaynakları yeniden işlemez, önbellekten
+                    yeniden kullanır. Senkronizasyon belirgin şekilde hızlanır.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.smartSync}
+                  onChange={(e) => update({ smartSync: e.target.checked })}
+                  className="h-4 w-4 accent-cyan-400"
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Toplu mod işlemleri</p>
+                  <p className="text-xs text-slate-400">
+                    Modlar sekmesinde tümünü tek tıkla etkinleştir veya kapat.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.bulkModOperations}
+                  onChange={(e) =>
+                    update({ bulkModOperations: e.target.checked })
+                  }
+                  className="h-4 w-4 accent-cyan-400"
+                />
+              </label>
+
+              <div className="flex items-center gap-2 pt-2">
+                <Zap className="h-4 w-4 text-neon-cyan" />
+                <h3 className="font-display text-sm font-semibold uppercase tracking-wide">
+                  Hareket ve Efektler
+                </h3>
+              </div>
+
+              <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Animasyonlar</p>
+                  <p className="text-xs text-slate-400">
+                    Geçiş ve hareket efektlerini kapat.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.animationsEnabled}
+                  onChange={(e) =>
+                    update({ animationsEnabled: e.target.checked })
+                  }
+                  className="h-4 w-4 accent-cyan-400"
+                />
+              </label>
+
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Animasyon hızı</span>
+                  <span className="font-mono text-neon-cyan">
+                    {settings.animationSpeed.toFixed(2)}x
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2}
+                  step={0.05}
+                  value={settings.animationSpeed}
+                  onChange={(e) =>
+                    update({ animationSpeed: Number(e.target.value) })
+                  }
+                  disabled={!settings.animationsEnabled}
+                  className="w-full accent-cyan-400 disabled:opacity-40"
+                />
+              </div>
+
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Parlama yoğunluğu</span>
+                  <span className="font-mono text-neon-cyan">
+                    %{settings.glowIntensity}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={settings.glowIntensity}
+                  onChange={(e) =>
+                    update({ glowIntensity: Number(e.target.value) })
+                  }
+                  className="w-full accent-cyan-400"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <Palette className="h-4 w-4 text-neon-magenta" />
+                <h3 className="font-display text-sm font-semibold uppercase tracking-wide">
+                  Görünüm Motoru
+                </h3>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <p className="text-xs leading-relaxed text-slate-400">
+                  Özel vurgu rengi, parlama yoğunluğu, köşe yuvarlaklığı ve
+                  animasyon hızı gibi tüm görsel parametreleri tek panelde
+                  ayarlayın.
+                </p>
+                <button
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    useAppStore.getState().setThemeEditorOpen(true);
+                  }}
+                  className="btn-primary mt-3"
+                >
+                  <Palette className="h-4 w-4" />
+                  Tema Editörünü Aç
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <p className="text-sm font-medium">Sistem Bilgisi</p>
+                <div className="mt-2 grid gap-1.5 font-mono text-[11px] text-slate-400">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-600">sürüm</span>
+                    <span>{appMeta?.version ?? version}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-600">tauri</span>
+                    <span>{appMeta?.tauriVersion ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-600">platform</span>
+                    <span>
+                      {appMeta ? `${appMeta.os} / ${appMeta.arch}` : "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

@@ -7,13 +7,24 @@ import {
   ArrowUpDown,
   Package,
   Images,
+  CheckSquare,
+  Heart,
+  Trash2,
+  Dices,
+  BarChart3,
+  Download,
 } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
 import type { RarityFilter, SkinSort } from "@/store/championStore";
 import { useAppStore } from "@/store/appStore";
-import { SkinGrid } from "@/components/skins/SkinGrid";
+import { useCollectionStore } from "@/store/collectionStore";
+import { useSelectionStore } from "@/store/selectionStore";
+import { useSettingsStore } from "@/store/settingsStore";
+import { VirtualSkinGrid } from "@/components/skins/VirtualSkinGrid";
+import { SkinSuggestions } from "@/components/skins/SkinSuggestions";
 import { RARITY_BADGE, rarityRank } from "@/lib/skinMeta";
+import { fuzzyRank, normalizeTr } from "@/lib/fuzzySearch";
 import type { SkinFilter } from "@/types/champion";
 
 const FILTERS: { id: SkinFilter; label: string }[] = [
@@ -60,6 +71,16 @@ export function ChampionWorkspace() {
   const onlyWithPackage = useChampionStore((s) => s.onlyWithPackage);
   const setOnlyWithPackage = useChampionStore((s) => s.setOnlyWithPackage);
   const setDetailSkinId = useAppStore((s) => s.setDetailSkinId);
+  const setRouletteOpen = useAppStore((s) => s.setRouletteOpen);
+  const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
+  const showToast = useAppStore((s) => s.showToast);
+  const favorites = useCollectionStore((s) => s.favorites);
+  const toggleFavorite = useChampionStore((s) => s.toggleFavorite);
+  const fuzzyEnabled = useSettingsStore((s) => s.settings.fuzzySearch);
+  const selectionActive = useSelectionStore((s) => s.active);
+  const setSelectionActive = useSelectionStore((s) => s.setActive);
+  const selectedIds = useSelectionStore((s) => s.ids);
+  const clearSelection = useSelectionStore((s) => s.clear);
 
   const champion = useMemo(
     () => champions.find((c) => c.id === selectedChampionId) ?? null,
@@ -70,15 +91,26 @@ export function ChampionWorkspace() {
     let list = selectedChampionId
       ? skins.filter((skin) => skin.championId === selectedChampionId)
       : skins;
-    const q = searchQuery.trim().toLocaleLowerCase("tr-TR");
+    const q = searchQuery.trim();
     if (q) {
-      list = list.filter(
-        (skin) =>
-          skin.name.toLocaleLowerCase("tr-TR").includes(q) ||
-          skin.championName.toLocaleLowerCase("tr-TR").includes(q) ||
-          String(skin.id).includes(q) ||
-          skin.description.toLocaleLowerCase("tr-TR").includes(q),
-      );
+      if (fuzzyEnabled) {
+        const ranked = fuzzyRank(
+          list,
+          q,
+          (skin) =>
+            `${skin.name} ${skin.championName} ${skin.id} ${skin.description}`,
+        );
+        list = ranked.map((r) => r.item);
+      } else {
+        const lower = normalizeTr(q);
+        list = list.filter(
+          (skin) =>
+            normalizeTr(skin.name).includes(lower) ||
+            normalizeTr(skin.championName).includes(lower) ||
+            String(skin.id).includes(lower) ||
+            normalizeTr(skin.description).includes(lower),
+        );
+      }
     }
     switch (activeFilter) {
       case "favorites":
@@ -137,6 +169,7 @@ export function ChampionWorkspace() {
     rarityFilter,
     onlyWithPackage,
     sortMode,
+    fuzzyEnabled,
   ]);
 
   const hasActiveFilter =
@@ -159,6 +192,48 @@ export function ChampionWorkspace() {
     setRarityFilter("all");
     setOnlyWithPackage(false);
   };
+
+  const bulkFavorite = () => {
+    const list = skins.filter((s) => selectedIds.includes(s.id));
+    let added = 0;
+    for (const skin of list) {
+      if (!favorites.includes(skin.id)) {
+        toggleFavorite(skin.id);
+        added += 1;
+      }
+    }
+    showToast(`${added} kostüm favorilere eklendi`, "success");
+    clearSelection();
+    setSelectionActive(false);
+  };
+
+  const bulkUnfavorite = () => {
+    let removed = 0;
+    for (const id of selectedIds) {
+      if (favorites.includes(id)) {
+        toggleFavorite(id);
+        removed += 1;
+      }
+    }
+    showToast(`${removed} kostüm favorilerden çıkarıldı`, "info");
+    clearSelection();
+    setSelectionActive(false);
+  };
+
+  const emptyState = (
+    <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+        <span className="font-display text-2xl text-slate-500">∅</span>
+      </div>
+      <p className="font-display text-lg font-semibold text-slate-400">
+        Kostüm bulunamadı
+      </p>
+      <p className="max-w-sm text-xs text-slate-500">
+        Filtreleri değiştirmeyi veya Ayarlar panelinden kaynak senkronizasyonunu
+        yenilemeyi deneyin.
+      </p>
+    </div>
+  );
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
@@ -233,6 +308,25 @@ export function ChampionWorkspace() {
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
             <button
+              onClick={() => setRouletteOpen(true)}
+              disabled={filteredSkins.length === 0}
+              className="btn-ghost !py-1.5 disabled:opacity-40"
+              title="Rastgele kostüm çarkı"
+            >
+              <Dices className="h-3.5 w-3.5 text-neon-magenta" />
+              Çark
+            </button>
+
+            <button
+              onClick={() => setDashboardOpen(true)}
+              className="btn-ghost !py-1.5"
+              title="Koleksiyon panosu"
+            >
+              <BarChart3 className="h-3.5 w-3.5 text-neon-violet" />
+              Pano
+            </button>
+
+            <button
               onClick={surprise}
               disabled={filteredSkins.length === 0}
               className="btn-ghost !py-1.5 disabled:opacity-40"
@@ -303,20 +397,76 @@ export function ChampionWorkspace() {
               </select>
             </label>
 
+            <button
+              onClick={() => setSelectionActive(!selectionActive)}
+              className={clsx(
+                "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 transition",
+                selectionActive
+                  ? "border-neon-lime/50 bg-neon-lime/10 text-neon-lime"
+                  : "border-white/10 bg-void-800 text-slate-400 hover:border-white/20",
+              )}
+              title="Çoklu seçim modu"
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              Seç
+            </button>
+
             {hasActiveFilter && (
               <button
                 onClick={resetFilters}
-                className="rounded-lg border border-white/10 px-2 py-1.5 text-slate-400 transition hover:border-rose-400/40 hover:text-rose-300"
+                className="rounded-lg border border-white/10 px-2.5 py-1.5 text-slate-400 transition hover:border-rose-400/40 hover:text-rose-300"
               >
                 Filtreleri sıfırla
               </button>
             )}
           </div>
         </div>
+
+        {selectionActive && (
+          <div className="animate-reveal-up mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-neon-lime/25 bg-neon-lime/5 px-4 py-2.5">
+            <span className="text-xs font-semibold text-neon-lime">
+              {selectedIds.length} kostüm seçildi
+            </span>
+            <button
+              onClick={bulkFavorite}
+              disabled={selectedIds.length === 0}
+              className="btn-ghost !py-1 !text-[11px] disabled:opacity-40"
+            >
+              <Heart className="h-3.5 w-3.5" /> Favorilere ekle
+            </button>
+            <button
+              onClick={bulkUnfavorite}
+              disabled={selectedIds.length === 0}
+              className="btn-ghost !py-1 !text-[11px] disabled:opacity-40"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Favorilerden çıkar
+            </button>
+            <button
+              onClick={() => {
+                setDetailSkinId(selectedIds[0] ?? null);
+              }}
+              disabled={selectedIds.length !== 1}
+              className="btn-ghost !py-1 !text-[11px] disabled:opacity-40"
+            >
+              <Download className="h-3.5 w-3.5" /> Detayı aç
+            </button>
+            <button
+              onClick={() => {
+                clearSelection();
+                setSelectionActive(false);
+              }}
+              className="btn-ghost ml-auto !py-1 !text-[11px]"
+            >
+              <X className="h-3.5 w-3.5" /> Çık
+            </button>
+          </div>
+        )}
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <SkinGrid skins={filteredSkins} />
+      <SkinSuggestions />
+
+      <div className="min-h-0 flex-1">
+        <VirtualSkinGrid skins={filteredSkins} emptyState={emptyState} />
       </div>
     </section>
   );

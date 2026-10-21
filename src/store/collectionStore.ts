@@ -51,7 +51,14 @@ export const useCollectionStore = create<CollectionStore>()(
     }),
     {
       name: "void-collection",
-      version: 1,
+      version: 2,
+      migrate: (persisted) => {
+        const stored = (persisted ?? {}) as Partial<CollectionStore>;
+        return {
+          favorites: stored.favorites ?? [],
+          recent: stored.recent ?? [],
+        };
+      },
     },
   ),
 );
