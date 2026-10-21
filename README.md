@@ -74,6 +74,30 @@ Akış:
 - **Kütüphane gezgini**: LTK klasörünü dosya dosya gez, dosyaları doğrudan aç.
 - **Patcher yönetimi**: VOID üzerinden LTK'yı Windows açılışında başlatma ve sessiz mod (tepside çalış + patcher'ı otomatik başlat) tek anahtarla ayarlanır.
 
+### VOID Yama Motoru
+
+LTK Manager'a ihtiyaç duymadan çalışan, VOID'un kendi yama motoru. Rust tarafında
+Apache-2.0 lisanslı [`ltk_overlay`](https://crates.io/crates/ltk_overlay),
+[`ltk_modpkg`](https://crates.io/crates/ltk_modpkg),
+[`ltk_fantome`](https://crates.io/crates/ltk_fantome) ve
+[`ltk_mod_project`](https://crates.io/crates/ltk_mod_project) crate'leri
+kullanılır; GPL-3.0 kod kopyalanmaz.
+
+- **Kendi kütüphane**: paketler `%APPDATA%\VOID\mods` altına açılır, etkin/pasif
+  durumu `%APPDATA%\VOID\library.json` dosyasında tutulur.
+- **Paket içe aktarma**: `.modpkg` ve `.fantome` dosyaları açılır; sürükle-bırak
+  veya dosya seçici ile eklenir.
+- **Overlay derleme**: etkin modlardan yamalanmış WAD dosyaları
+  `%APPDATA%\VOID\profiles\default\overlay` altına üretilir. İnşaiye göre
+  değişmeyen WAD'lar yeniden kullanılır, ilerleme arayüze canlı akar.
+- **Oyun bağlantısı**: resmi `ltk_patcher_host.exe` ile satır tabanlı bir protokol
+  üzerinden konuşulur (`config loglevel`, `config flags`, `config prefix`,
+  `start scan`, `stop`). Host'un ürettiği olaylar arayüze aktarılır.
+- **Patcher binary'leri**: `ltk_patcher_host.exe` ve `ltk_patcher_dll.dll`
+  VOID tarafından dağıtılmaz. Uygulamanın yanındaki `patcher` klasörüne ya da
+  `%LOCALAPPDATA%\VOID\patcher` içine kopyalanır. Overlay derlemesi bu
+  dosyalar olmadan da çalışır.
+
 ### Sistem
 
 - **Özel başlık çubuğu**: sürüklenebilir pencere, küçült / büyüt / kapat düğmeleri; pencere boyutu ve konumu hatırlanır.
@@ -92,7 +116,7 @@ Akış:
 
 - Windows 10 / 11 (x64)
 - WebView2 Runtime (Windows 11'de hazır gelir; Windows 10'da gerekebilir)
-- [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) — kostümleri oyunda görmek için **zorunlu**
+- [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) — LTK kütüphanesi yoluyla çalışmak için; VOID'un kendi yama motoru bu zorunluluğu kaldırır, ancak oyun bağlantısı için `ltk_patcher_host.exe` ve `ltk_patcher_dll.dll` dosyaları gerekir
 
 **Kaynaktan derlemek için**
 
@@ -177,17 +201,21 @@ Hibrit mod açıkken tüm etkin kaynaklar birleştirilir; aynı kostüm birden f
 │   │   ├── layout/           # başlık, durum çubuğu, boot ekranı, bildirim merkezi
 │   │   ├── modals/           # pano, roulette, tema editörü, sinematik, gezgin
 │   │   ├── mods/             # Modlar ekranı (LTK kütüphanesi + patcher kontrolü)
+│   │   │                     # ve VOID'un kendi yama motoru paneli
 │   │   ├── panel/            # seçili kostüm paneli
 │   │   ├── settings/         # ayarlar ekranı
 │   │   └── skins/            # kostüm kartları, sanal ızgara, öneriler
 │   ├── hooks/                # veri kaynakları, senkronizasyon kancaları
 │   ├── lib/                  # tema, fuzzy arama, öneriler, senkronizasyon önbelleği
-│   ├── services/             # syncService, ltkManager, görsel yükleyici
+│   ├── services/             # syncService, ltkManager, voidEngine, görsel yükleyici
 │   ├── store/                # zustand store'ları
 │   ├── types/                # tipler ve varsayılan kaynaklar
 │   └── styles/               # Tailwind katmanları
 └── src-tauri/                # Rust tarafı
-    └── src/lib.rs            # tüm Tauri komutları
+    └── src/
+        ├── lib.rs            # Tauri komutları
+        ├── voidmods.rs       # kendi kütüphane, paket içe aktarma, overlay derleme
+        └── voidpatcher.rs    # patcher host protokol istemcisi
 ```
 
 Rust tarafındaki ana komutlar (`src-tauri/src/lib.rs`):
@@ -205,6 +233,9 @@ Rust tarafındaki ana komutlar (`src-tauri/src/lib.rs`):
 | `list_dir_entries`, `open_folder` | Kütüphane gezgini |
 | `app_info` | Uygulama sürümü / platform bilgisi |
 | `extract_mod_package`, `apply_mod`, `revert_last_patch` | Paket inceleme ve yedekleme |
+| `void_mods_paths`, `void_mods_list`, `void_mods_import`, `void_mods_set_enabled`, `void_mods_remove` | VOID'un kendi mod kütüphanesi (paket açma, etkin/pasif) |
+| `void_mods_build_overlay` | Etkin modlardan yamalanmış WAD overlay'i üretir |
+| `void_patcher_status`, `void_patcher_config`, `void_patcher_start`, `void_patcher_stop`, `void_patcher_logs` | Patcher host protokolü ve durum takibi |
 
 ---
 
@@ -217,7 +248,7 @@ Tauri 2, React 18, TypeScript, Zustand, Tailwind CSS, Vite, Rust. İkonlar [Luci
 ## Bilinen sınırlamalar
 
 - Yalnızca Windows x64 hedeflenir.
-- Kostümleri oyunda görmek için LTK Manager'ın kurulu ve patcher'ının çalışıyor olması gerekir; VOID tek başına oyuna yama uygulamaz.
+- Kostümleri oyunda görmek için LTK Manager'ın kurulu ve patcher'ının çalışıyor olması gerekir; LTK kurulu değilse VOID'un kendi yama motoru kullanılabilir, ancak bu durumda `ltk_patcher_host.exe` ve `ltk_patcher_dll.dll` dosyalarının kendiniz sağlanması gerekir.
 - Yerel (LCU) kaynak oyunun mevcut varlıklarını gösterir, dağıtılabilir `.fantome` paketi sunmaz; bu yüzden yerel kaynaktaki kostümler LTK'ya gönderilemez.
 - İlk taramada çok sayıda görsel indirildiği için önbellek açıkken ilk açılış yavaş olabilir.
 
@@ -229,6 +260,8 @@ Tauri 2, React 18, TypeScript, Zustand, Tailwind CSS, Vite, Rust. İkonlar [Luci
 - Proje, Riot Games'e ait hiçbir varlığı (görsel, ses, veri) barındırmaz ve dağıtmaz. Şampiyon görselleri çalışma zamanında CommunityDragon ve çalışan oyun istemcisi (LCU) gibi topluluk kaynaklarından çekilir.
 - Kostüm paketleri üçüncü taraf topluluk arşivlerinden indirilir; bunların içeriğinden ilgili arşiv sahipleri sorumludur.
 - Proje, LTK Manager'ın yama motorunu (patcher DLL'i) barındırmaz veya dağıtmaz. LTK Manager ayrı ve bağımsız bir açık kaynak projedir (GPL-3.0); VOID onunla yalnızca herkese açık `ltk://` derin bağlantı protokolü üzerinden, bağımsız olarak yeniden uygulanmış şekilde konuşur.
+- VOID'un kendi yama motoru, LeagueToolkit'in Apache-2.0 lisanslı `ltk_overlay`, `ltk_modpkg`, `ltk_fantome` ve `ltk_mod_project` crate'lerini kütüphane olarak kullanır; bu crate'ler bağımsız olarak geliştirilip crates.io'da yayımlanmıştır. GPL-3.0 lisanslı `ltk-manager-runtime` kodu kopyalanmamıştır.
+- `ltk_patcher_host.exe` ve `ltk_patcher_dll.dll` dosyaları VOID tarafından paketlenmez ve dağıtılmaz; kullanıcı tarafından sağlanır.
 - Üçüncü taraf yazılımların kullanımı Riot Games Hizmet Şartları kapsamında değerlendirilebilir. Riski kabul ederek kullan.
 
 ---
@@ -253,5 +286,6 @@ cd src-tauri && cargo test
 ## Teşekkürler
 
 - [LTK Manager / LeagueToolkit](https://github.com/LeagueToolkit/ltk-manager) — yama motoru ve `ltk://` protokolü
+- [LeagueToolkit / league-mod](https://github.com/LeagueToolkit/league-mod) — Apache-2.0 `ltk_overlay`, `ltk_modpkg`, `ltk_fantome`, `ltk_mod_project` crate'leri
 - [CommunityDragon](https://github.com/CommunityDragon) — şampiyon ve kostüm verisi
 - Kostüm arşivlerini açık tutan topluluk geliştiricileri

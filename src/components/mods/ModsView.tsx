@@ -24,6 +24,7 @@ import clsx from "clsx";
 import { useAppStore } from "@/store/appStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { ModOpsBar } from "@/components/mods/ModOpsBar";
+import { VoidEnginePanel } from "@/components/mods/VoidEnginePanel";
 import {
   ltkImportFile,
   ltkLaunch,
@@ -588,6 +589,8 @@ export function ModsView() {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         {bulkEnabled && <ModOpsBar library={library} />}
+
+        <VoidEnginePanel />
 
         <div className="mb-5 rounded-2xl border border-white/10 bg-void-800/40 p-4">
           <div className="flex flex-wrap items-center gap-2">

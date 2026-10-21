@@ -7,6 +7,9 @@ use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
+mod voidmods;
+mod voidpatcher;
+
 static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
 static LCU_HTTP: OnceLock<reqwest::Client> = OnceLock::new();
 
@@ -1794,6 +1797,85 @@ async fn revert_last_patch() -> Result<PatchResult, String> {
     })
 }
 
+#[tauri::command]
+async fn void_mods_paths() -> Result<voidmods::VoidModsPaths, String> {
+    voidmods::paths()
+}
+
+#[tauri::command]
+async fn void_mods_list() -> Result<Vec<voidmods::VoidMod>, String> {
+    voidmods::list_mods()
+}
+
+#[tauri::command]
+async fn void_mods_import(package_path: String) -> Result<voidmods::VoidMod, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        voidmods::import_package(Path::new(&package_path))
+    })
+    .await
+    .map_err(|e| format!("İçe aktarma görevi başlatılamadı: {e}"))?
+}
+
+#[tauri::command]
+async fn void_mods_set_enabled(
+    id: String,
+    enabled: bool,
+) -> Result<Vec<voidmods::VoidMod>, String> {
+    voidmods::set_enabled(&id, enabled)
+}
+
+#[tauri::command]
+async fn void_mods_remove(id: String) -> Result<Vec<voidmods::VoidMod>, String> {
+    voidmods::remove_mod(&id)
+}
+
+#[tauri::command]
+async fn void_mods_build_overlay(
+    app: tauri::AppHandle,
+) -> Result<voidmods::OverlaySummary, String> {
+    tauri::async_runtime::spawn_blocking(move || voidmods::build_overlay(app))
+        .await
+        .map_err(|e| format!("Overlay derleme görevi başlatılamadı: {e}"))?
+}
+
+#[tauri::command]
+async fn void_patcher_status() -> voidpatcher::PatcherStatus {
+    voidpatcher::status()
+}
+
+#[tauri::command]
+async fn void_patcher_config() -> voidpatcher::PatcherConfig {
+    voidpatcher::config()
+}
+
+#[tauri::command]
+async fn void_patcher_start(
+    app: tauri::AppHandle,
+    prefix: Option<String>,
+    log_level: Option<u32>,
+    flags: Option<u32>,
+) -> Result<voidpatcher::PatcherStatus, String> {
+    let target = match prefix {
+        Some(value) if !value.trim().is_empty() => value,
+        _ => voidmods::overlay_dir()?.to_string_lossy().to_string(),
+    };
+    let level = log_level.unwrap_or(voidpatcher::LOG_LEVEL_INFO);
+    let mask = flags.unwrap_or(voidpatcher::HOOK_OPT_OUT_AH_V1);
+    tauri::async_runtime::spawn_blocking(move || voidpatcher::start(app, &target, level, mask))
+        .await
+        .map_err(|e| format!("Patcher görevi başlatılamadı: {e}"))?
+}
+
+#[tauri::command]
+async fn void_patcher_stop() -> Result<(), String> {
+    voidpatcher::stop()
+}
+
+#[tauri::command]
+async fn void_patcher_logs() -> Vec<String> {
+    voidpatcher::logs()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1836,7 +1918,18 @@ pub fn run() {
             ltk_patcher_config,
             ltk_set_autostart,
             ltk_set_patcher_flags,
-            ltk_launch
+            ltk_launch,
+            void_mods_paths,
+            void_mods_list,
+            void_mods_import,
+            void_mods_set_enabled,
+            void_mods_remove,
+            void_mods_build_overlay,
+            void_patcher_status,
+            void_patcher_config,
+            void_patcher_start,
+            void_patcher_stop,
+            void_patcher_logs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

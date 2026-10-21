@@ -1,6 +1,6 @@
 [package]
 name = "void-skin-manager"
-version = "3.0.0"
+version = "4.0.0"
 edition = "2021"
 authors = ["VOID"]
 description = "League of Legends custom skin & mod manager built with Tauri 2 and React"
@@ -27,3 +27,8 @@ reqwest = { version = "0.12", default-features = true, features = ["json", "stre
 walkdir = "2"
 winreg = "0.56"
 zip = "2"
+camino = "1"
+ltk_modpkg = "0.12"
+ltk_fantome = "0.15"
+ltk_mod_project = { version = "0.16", features = ["modpkg", "fantome"] }
+ltk_overlay = "0.17"
