@@ -14,9 +14,9 @@ const DENSITY_SPEC: Record<
   GridDensity,
   { minWidth: number; gap: number; textHeight: number }
 > = {
-  compact: { minWidth: 180, gap: 12, textHeight: 72 },
-  comfortable: { minWidth: 240, gap: 16, textHeight: 82 },
-  large: { minWidth: 320, gap: 16, textHeight: 82 },
+  compact: { minWidth: 132, gap: 10, textHeight: 50 },
+  comfortable: { minWidth: 168, gap: 12, textHeight: 50 },
+  large: { minWidth: 220, gap: 14, textHeight: 50 },
 };
 
 const OVERSCAN_ROWS = 3;
@@ -57,7 +57,7 @@ export function VirtualSkinGrid({ skins, emptyState }: VirtualSkinGridProps) {
     if (containerRef.current) containerRef.current.scrollTop = 0;
   }, [skins.length]);
 
-  const padding = 24;
+  const padding = 14;
   const innerWidth = Math.max(0, viewportWidth - padding * 2);
   const columns = Math.max(
     1,
@@ -67,7 +67,7 @@ export function VirtualSkinGrid({ skins, emptyState }: VirtualSkinGridProps) {
     columns > 0
       ? (innerWidth - spec.gap * (columns - 1)) / columns
       : innerWidth;
-  const imageHeight = Math.round((cardWidth * 9) / 16);
+  const imageHeight = Math.round(cardWidth / 2);
   const rowHeight = imageHeight + spec.textHeight + spec.gap;
   const totalRows = Math.ceil(skins.length / columns);
   const totalHeight = totalRows * rowHeight;
@@ -118,6 +118,8 @@ export function VirtualSkinGrid({ skins, emptyState }: VirtualSkinGridProps) {
               style={{
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
                 gap: spec.gap,
+                paddingLeft: padding,
+                paddingRight: padding,
               }}
             >
               {visible.map(({ skin, index }) => (

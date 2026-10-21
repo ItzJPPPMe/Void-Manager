@@ -69,7 +69,7 @@ export function ChampionGalleryModal() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
             {championSkins.map((skin) => {
               const rarity = RARITY_BADGE[skin.rarity];
               return (
@@ -82,7 +82,7 @@ export function ChampionGalleryModal() {
                   <LazyImage
                     url={skin.splashUrl || skin.loadScreenUrl}
                     alt={skin.name}
-                    wrapperClassName="aspect-video w-full"
+                    wrapperClassName="aspect-[2/1] w-full"
                     objectPosition="top"
                   />
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-void-950 via-void-950/20 to-transparent" />

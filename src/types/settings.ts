@@ -134,7 +134,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   patchTargetMode: "fantome",
   themeAccent: "cyan",
   skinNameLanguage: "tr",
-  gridDensity: "comfortable",
+  gridDensity: "compact",
   checkUpdateOnLaunch: true,
   customAccent: null,
   glowIntensity: 55,

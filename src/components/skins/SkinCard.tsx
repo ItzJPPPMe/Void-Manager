@@ -49,7 +49,7 @@ export function SkinCard({
       onDoubleClick={() => setDetailSkinId(skin.id)}
       className={clsx(
         "group relative cursor-pointer overflow-hidden border bg-void-850 shadow-card transition duration-200",
-        "[content-visibility:auto] [contain-intrinsic-size:auto_220px]",
+        "[content-visibility:auto] [contain-intrinsic-size:auto_120px]",
         selected
           ? "border-neon-lime/70 shadow-neon ring-1 ring-neon-lime/40"
           : isSelected
@@ -57,7 +57,7 @@ export function SkinCard({
             : "border-white/5 hover:-translate-y-0.5 hover:border-neon-cyan/40",
       )}
     >
-      <div className="relative aspect-[16/9] w-full overflow-hidden bg-void-800">
+      <div className="relative aspect-[2/1] w-full overflow-hidden bg-void-800">
         <LazyImage
           url={skin.splashUrl}
           alt={skin.name}
@@ -68,68 +68,70 @@ export function SkinCard({
 
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-void-950 via-void-950/20 to-transparent" />
 
-        <div className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
+        <div className="pointer-events-none absolute left-1.5 top-1.5 flex flex-wrap gap-0.5">
           {rarity && (
-            <span className={clsx("chip", rarity.className)}>{rarity.label}</span>
+            <span className={clsx("chip !px-1 !text-[8px]", rarity.className)}>
+              {rarity.label}
+            </span>
           )}
           {chromaCount > 0 && (
-            <span className="chip border-neon-violet/50 bg-neon-violet/15 text-neon-violet">
-              <Palette className="h-3 w-3" /> {chromaCount}
+            <span className="chip !px-1 !text-[8px] border-neon-violet/50 bg-neon-violet/15 text-neon-violet">
+              <Palette className="h-2.5 w-2.5" /> {chromaCount}
             </span>
           )}
           {skin.isLegacy && (
-            <span className="chip border-rose-400/50 bg-rose-500/15 text-rose-300">
+            <span className="chip !px-1 !text-[8px] border-rose-400/50 bg-rose-500/15 text-rose-300">
               LEGACY
             </span>
           )}
           {skin.ready && (
-            <span className="chip border-neon-lime/50 bg-neon-lime/15 text-neon-lime">
-              <Check className="h-3 w-3" /> HAZIR
+            <span className="chip !px-1 !text-[8px] border-neon-lime/50 bg-neon-lime/15 text-neon-lime">
+              <Check className="h-2.5 w-2.5" /> HAZIR
             </span>
           )}
           {!skin.ready && skin.packageUrl && (
-            <span className="chip border-neon-cyan/50 bg-neon-cyan/15 text-neon-cyan">
+            <span className="chip !px-1 !text-[8px] border-neon-cyan/50 bg-neon-cyan/15 text-neon-cyan">
               MOD VAR
             </span>
           )}
         </div>
 
         {selectable && (
-          <div className="absolute right-2 top-2">
+          <div className="absolute right-1.5 top-1.5">
             <span
               className={clsx(
-                "flex h-8 w-8 items-center justify-center rounded-lg border backdrop-blur-md transition",
+                "flex h-6 w-6 items-center justify-center rounded-md border backdrop-blur-md transition",
                 selected
                   ? "border-neon-lime/70 bg-neon-lime/20 text-neon-lime"
                   : "border-white/20 bg-black/40 text-slate-300",
               )}
             >
-              <CheckSquare className="h-4 w-4" />
+              <CheckSquare className="h-3.5 w-3.5" />
             </span>
           </div>
         )}
 
         {!selectable && (
-          <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
+          <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition group-hover:opacity-100">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setCinematicSkinId(skin.id);
               }}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-neon-violet/50 hover:text-neon-violet"
+              className="flex h-6 w-6 items-center justify-center rounded-md border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-neon-violet/50 hover:text-neon-violet"
               title="Sinematik önizleme"
             >
-              <Maximize2 className="h-4 w-4" />
+              <Maximize2 className="h-3 w-3" />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setDetailSkinId(skin.id);
               }}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-neon-cyan/50 hover:text-neon-cyan"
+              className="flex h-6 w-6 items-center justify-center rounded-md border border-white/15 bg-black/40 text-slate-300 backdrop-blur-md transition hover:border-neon-cyan/50 hover:text-neon-cyan"
               title="Detayları aç"
             >
-              <Maximize2 className="h-4 w-4" />
+              <Maximize2 className="h-3 w-3" />
             </button>
             <button
               onClick={(e) => {
@@ -137,23 +139,23 @@ export function SkinCard({
                 toggleFavorite(skin.id);
               }}
               className={clsx(
-                "flex h-8 w-8 items-center justify-center rounded-lg border backdrop-blur-md transition",
+                "flex h-6 w-6 items-center justify-center rounded-md border backdrop-blur-md transition",
                 skin.favorite
                   ? "border-rose-400/50 bg-rose-500/20 text-rose-400"
                   : "border-white/15 bg-black/40 text-slate-300 hover:border-rose-400/50 hover:text-rose-400",
               )}
               title="Favorilere ekle"
             >
-              <Heart className={clsx("h-4 w-4", skin.favorite && "fill-current")} />
+              <Heart className={clsx("h-3 w-3", skin.favorite && "fill-current")} />
             </button>
           </div>
         )}
       </div>
 
-      <div className="space-y-1 p-3">
-        <div className="flex items-start justify-between gap-2">
+      <div className="space-y-0.5 p-2">
+        <div className="flex items-start justify-between gap-1.5">
           <h3
-            className="truncate font-display text-sm font-semibold tracking-wide text-slate-100"
+            className="truncate font-display text-xs font-semibold tracking-wide text-slate-100"
             title={skin.name}
           >
             {skin.name}
@@ -161,7 +163,7 @@ export function SkinCard({
           {source && SOURCE_BADGE[source] && (
             <span
               className={clsx(
-                "chip shrink-0 !px-1.5 !py-0 !text-[9px]",
+                "chip shrink-0 !px-1 !py-0 !text-[8px]",
                 SOURCE_BADGE[source].className,
               )}
             >
@@ -169,12 +171,9 @@ export function SkinCard({
             </span>
           )}
         </div>
-        <p className="truncate text-[11px] leading-snug text-slate-400">
-          {skin.championName}
-          {skin.description ? ` · ${skin.description}` : ""}
-        </p>
-        <p className="font-mono text-[10px] text-slate-600">
-          ID: {skin.id} · {skin.skinNum === 0 ? "Temel" : `#${skin.skinNum}`}
+        <p className="truncate text-[10px] leading-snug text-slate-400">
+          {skin.championName} · {skin.skinNum === 0 ? "Temel" : `#${skin.skinNum}`} ·
+          ID {skin.id}
         </p>
       </div>
     </article>

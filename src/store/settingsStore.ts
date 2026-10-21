@@ -52,7 +52,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "void-settings",
-      version: 2,
+      version: 3,
       partialize: (s) => ({
         settings: s.settings,
         repositories: s.repositories,
@@ -61,7 +61,11 @@ export const useSettingsStore = create<SettingsStore>()(
         const stored = (persisted ?? {}) as Partial<SettingsStore>;
         return {
           ...stored,
-          settings: { ...DEFAULT_SETTINGS, ...(stored.settings ?? {}) },
+          settings: {
+            ...DEFAULT_SETTINGS,
+            ...(stored.settings ?? {}),
+            gridDensity: DEFAULT_SETTINGS.gridDensity,
+          },
           repositories: stored.repositories ?? DEFAULT_REPOSITORIES,
         };
       },

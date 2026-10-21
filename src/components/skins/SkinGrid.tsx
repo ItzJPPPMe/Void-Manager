@@ -8,9 +8,9 @@ interface SkinGridProps {
 }
 
 const DENSITY_CLASS: Record<GridDensity, string> = {
-  compact: "grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3",
-  comfortable: "grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4",
-  large: "grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4",
+  compact: "grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2.5",
+  comfortable: "grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3",
+  large: "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3.5",
 };
 
 export function SkinGrid({ skins }: SkinGridProps) {
