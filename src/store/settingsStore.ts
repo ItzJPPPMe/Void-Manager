@@ -52,19 +52,23 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "void-settings",
-      version: 3,
+      version: 4,
       partialize: (s) => ({
         settings: s.settings,
         repositories: s.repositories,
       }),
-      migrate: (persisted) => {
+      migrate: (persisted, version) => {
         const stored = (persisted ?? {}) as Partial<SettingsStore>;
+        const base: AppSettings = {
+          ...DEFAULT_SETTINGS,
+          ...(stored.settings ?? {}),
+        };
         return {
           ...stored,
           settings: {
-            ...DEFAULT_SETTINGS,
-            ...(stored.settings ?? {}),
+            ...base,
             gridDensity: DEFAULT_SETTINGS.gridDensity,
+            setupCompleted: version < 4 ? true : base.setupCompleted,
           },
           repositories: stored.repositories ?? DEFAULT_REPOSITORIES,
         };

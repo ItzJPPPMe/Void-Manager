@@ -7,6 +7,7 @@ const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: "Ctrl + Shift + T", label: "Tema editörünü aç" },
   { keys: "Ctrl + 1", label: "Kostümler görünümü" },
   { keys: "Ctrl + 2", label: "Modlar görünümü" },
+  { keys: "Ctrl + 3", label: "Favoriler görünümü" },
   { keys: "F", label: "Seçili kostümü favorile" },
   { keys: "R", label: "Rastgele kostüm seç" },
   { keys: "G", label: "Seçili şampiyonun galerisini aç" },

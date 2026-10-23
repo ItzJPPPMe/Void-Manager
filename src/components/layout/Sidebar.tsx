@@ -12,6 +12,7 @@ import {
   Keyboard,
   Dices,
   Palette,
+  Wrench,
 } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
@@ -52,6 +53,7 @@ export function Sidebar() {
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
   const setRouletteOpen = useAppStore((s) => s.setRouletteOpen);
   const setThemeEditorOpen = useAppStore((s) => s.setThemeEditorOpen);
+  const setSetupOpen = useAppStore((s) => s.setSetupOpen);
   const activeFilter = useChampionStore((s) => s.activeFilter);
   const setActiveFilter = useChampionStore((s) => s.setActiveFilter);
   const view = useAppStore((s) => s.view);
@@ -116,14 +118,26 @@ export function Sidebar() {
           <button
             onClick={() => setView("skins")}
             className={clsx(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition",
+              "flex flex-1 items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-[11px] font-semibold transition",
               view === "skins"
                 ? "bg-neon-cyan/15 text-neon-cyan shadow-neon"
                 : "text-slate-400 hover:bg-white/5",
             )}
           >
-            <Swords className="h-4 w-4" />
+            <Swords className="h-3.5 w-3.5" />
             Kostümler
+          </button>
+          <button
+            onClick={() => setView("favorites")}
+            className={clsx(
+              "flex flex-1 items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-[11px] font-semibold transition",
+              view === "favorites"
+                ? "bg-rose-500/15 text-rose-300 shadow-neon"
+                : "text-slate-400 hover:bg-white/5",
+            )}
+          >
+            <Heart className="h-3.5 w-3.5" />
+            Favoriler
           </button>
           <button
             onClick={() => {
@@ -131,19 +145,19 @@ export function Sidebar() {
               void refreshLibrary();
             }}
             className={clsx(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition",
+              "flex flex-1 items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-[11px] font-semibold transition",
               view === "mods"
                 ? "bg-neon-violet/20 text-neon-violet shadow-neon"
                 : "text-slate-400 hover:bg-white/5",
             )}
           >
-            <Package className="h-4 w-4" />
+            <Package className="h-3.5 w-3.5" />
             Modlar
           </button>
         </div>
       </div>
 
-      {view === "skins" ? (
+      {view !== "mods" ? (
         <>
           <div className="px-3 pt-3">
             <div className="relative">
@@ -283,10 +297,10 @@ export function Sidebar() {
       )}
 
       <div className="border-t border-white/5 p-3">
-        <div className="mb-2 grid grid-cols-3 gap-1.5">
+        <div className="mb-2 grid grid-cols-4 gap-1.5">
           <button
             onClick={() => setDashboardOpen(true)}
-            className="btn-ghost !px-1.5 !text-[10px]"
+            className="btn-ghost !px-1 !text-[10px]"
             title="Koleksiyon panosu"
           >
             <BarChart3 className="h-3.5 w-3.5" />
@@ -294,7 +308,7 @@ export function Sidebar() {
           </button>
           <button
             onClick={() => setRouletteOpen(true)}
-            className="btn-ghost !px-1.5 !text-[10px]"
+            className="btn-ghost !px-1 !text-[10px]"
             title="Skin Roulette"
           >
             <Dices className="h-3.5 w-3.5" />
@@ -302,11 +316,19 @@ export function Sidebar() {
           </button>
           <button
             onClick={() => setThemeEditorOpen(true)}
-            className="btn-ghost !px-1.5 !text-[10px]"
+            className="btn-ghost !px-1 !text-[10px]"
             title="Tema editörü"
           >
             <Palette className="h-3.5 w-3.5" />
             Tema
+          </button>
+          <button
+            onClick={() => setSetupOpen(true)}
+            className="btn-ghost !px-1 !text-[10px]"
+            title="Kurulum sihirbazı ve tanılama"
+          >
+            <Wrench className="h-3.5 w-3.5" />
+            Kurulum
           </button>
         </div>
         <div className="flex gap-1.5">
@@ -335,7 +357,7 @@ export function Sidebar() {
           </button>
         </div>
         <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-slate-500">
-          {view === "skins" ? (
+          {view !== "mods" ? (
             <span className="inline-flex items-center gap-1">
               <Layers className="h-3 w-3" /> Kaynak: {champions.length}
             </span>

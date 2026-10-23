@@ -25,6 +25,7 @@ import { useAppStore } from "@/store/appStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { ModOpsBar } from "@/components/mods/ModOpsBar";
 import { VoidEnginePanel } from "@/components/mods/VoidEnginePanel";
+import { VoidStatusPanel } from "@/components/mods/VoidStatusPanel";
 import {
   ltkImportFile,
   ltkLaunch,
@@ -591,6 +592,8 @@ export function ModsView() {
         {bulkEnabled && <ModOpsBar library={library} />}
 
         <VoidEnginePanel />
+
+        <VoidStatusPanel />
 
         <div className="mb-5 rounded-2xl border border-white/10 bg-void-800/40 p-4">
           <div className="flex flex-wrap items-center gap-2">

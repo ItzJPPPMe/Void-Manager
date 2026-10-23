@@ -8,6 +8,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 interface VirtualSkinGridProps {
   skins: Skin[];
   emptyState?: React.ReactNode;
+  loading?: boolean;
 }
 
 const DENSITY_SPEC: Record<
@@ -22,7 +23,11 @@ const DENSITY_SPEC: Record<
 const OVERSCAN_ROWS = 3;
 const VIRTUAL_THRESHOLD = 60;
 
-export function VirtualSkinGrid({ skins, emptyState }: VirtualSkinGridProps) {
+export function VirtualSkinGrid({
+  skins,
+  emptyState,
+  loading = false,
+}: VirtualSkinGridProps) {
   const density = useSettingsStore((s) => s.settings.gridDensity);
   const spec = DENSITY_SPEC[density];
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -94,6 +99,32 @@ export function VirtualSkinGrid({ skins, emptyState }: VirtualSkinGridProps) {
   }
 
   if (skins.length === 0) {
+    if (loading) {
+      const count = Math.max(columns || 1, 1) * 3;
+      return (
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: `repeat(${columns || 1}, minmax(0, 1fr))`,
+            gap: spec.gap,
+            padding: padding,
+          }}
+        >
+          {Array.from({ length: count }).map((_, index) => (
+            <div
+              key={index}
+              className="animate-pulse overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]"
+            >
+              <div className="aspect-[2/1] w-full bg-white/5" />
+              <div className="space-y-1.5 p-2">
+                <div className="h-2.5 w-3/4 rounded bg-white/10" />
+                <div className="h-2 w-1/2 rounded bg-white/5" />
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
     return <>{emptyState}</>;
   }
 

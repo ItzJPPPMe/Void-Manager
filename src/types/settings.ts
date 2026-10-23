@@ -23,6 +23,7 @@ export interface AppSettings {
   leaguePath: string | null;
   riotClientPath: string | null;
   patchTargetMode: PatchTargetMode;
+  sendTarget: SendTarget;
   themeAccent: ThemeAccent;
   skinNameLanguage: SkinNameLanguage;
   gridDensity: GridDensity;
@@ -36,6 +37,8 @@ export interface AppSettings {
   fuzzySearch: boolean;
   bulkModOperations: boolean;
   smartSync: boolean;
+  autoPatchOnGameLaunch: boolean;
+  setupCompleted: boolean;
 }
 
 export type DataSourceMode = "auto" | "online" | "lcu";
@@ -43,6 +46,8 @@ export type DataSourceMode = "auto" | "online" | "lcu";
 export type CatalogSource = "online" | "lcu";
 
 export type PatchTargetMode = "fantome" | "wad-overlay" | "cslol-compatible";
+
+export type SendTarget = "ltk" | "void";
 
 export type ThemeAccent = "cyan" | "violet" | "magenta" | "lime";
 
@@ -132,6 +137,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   leaguePath: null,
   riotClientPath: null,
   patchTargetMode: "fantome",
+  sendTarget: "void",
   themeAccent: "cyan",
   skinNameLanguage: "tr",
   gridDensity: "compact",
@@ -145,4 +151,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fuzzySearch: true,
   bulkModOperations: true,
   smartSync: true,
+  autoPatchOnGameLaunch: false,
+  setupCompleted: false,
 };

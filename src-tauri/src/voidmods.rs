@@ -32,6 +32,8 @@ pub struct VoidMod {
     pub layers: Vec<String>,
     #[serde(default)]
     pub thumbnail: Option<String>,
+    #[serde(default)]
+    pub skin_id: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -185,6 +187,62 @@ pub fn remove_mod(id: &str) -> Result<Vec<VoidMod>, String> {
     Ok(mods)
 }
 
+pub fn import_for_skin(package_path: &Path, skin_id: u32) -> Result<VoidMod, String> {
+    let mut mods = read_library()?;
+    if let Some(existing) = mods.iter_mut().find(|m| m.skin_id == Some(skin_id)) {
+        existing.enabled = true;
+        let result = existing.clone();
+        write_library(&mods)?;
+        return Ok(result);
+    }
+    let entry = import_package(package_path)?;
+    let mut mods = read_library()?;
+    let mut result = entry.clone();
+    if let Some(stored) = mods.iter_mut().find(|m| m.id == entry.id) {
+        stored.skin_id = Some(skin_id);
+        stored.enabled = true;
+        result = stored.clone();
+    }
+    write_library(&mods)?;
+    Ok(result)
+}
+
+pub fn remove_by_skin(skin_id: u32) -> Result<Vec<VoidMod>, String> {
+    let mods = read_library()?;
+    let mut kept: Vec<VoidMod> = Vec::with_capacity(mods.len());
+    let mut removed_dirs: Vec<String> = Vec::new();
+    for entry in mods {
+        if entry.skin_id == Some(skin_id) {
+            removed_dirs.push(entry.path);
+        } else {
+            kept.push(entry);
+        }
+    }
+    if removed_dirs.is_empty() {
+        return Ok(kept);
+    }
+    write_library(&kept)?;
+    let root = mods_dir().unwrap_or_default();
+    for path in removed_dirs {
+        let dir = PathBuf::from(path);
+        if dir.starts_with(&root) && dir.is_dir() {
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+    Ok(kept)
+}
+
+pub fn set_enabled_many(ids: &[String], enabled: bool) -> Result<Vec<VoidMod>, String> {
+    let mut mods = read_library()?;
+    for entry in mods.iter_mut() {
+        if ids.iter().any(|id| id == &entry.id) {
+            entry.enabled = enabled;
+        }
+    }
+    write_library(&mods)?;
+    Ok(mods)
+}
+
 fn sanitize_id(raw: &str) -> String {
     let mut out = String::new();
     for ch in raw.chars() {
@@ -289,6 +347,7 @@ pub fn import_package(package_path: &Path) -> Result<VoidMod, String> {
         tags: project.tags.iter().map(|t| t.to_string()).collect::<Vec<_>>(),
         layers,
         thumbnail: project.thumbnail.clone(),
+        skin_id: None,
     };
 
     existing.push(entry.clone());
@@ -362,4 +421,161 @@ pub fn build_overlay(app: tauri::AppHandle) -> Result<OverlaySummary, String> {
             .collect::<Vec<_>>(),
         build_time_ms: result.build_time.as_millis() as u64,
     })
+}
+
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayStatus {
+    pub exists: bool,
+    pub overlay_dir: String,
+    pub file_count: u64,
+    pub total_bytes: u64,
+    pub last_built_ms: Option<u64>,
+    pub stale: bool,
+    pub enabled_mods: usize,
+}
+
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ModHealth {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub healthy: bool,
+    pub issues: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Diagnostics {
+    pub app_version: String,
+    pub league_found: bool,
+    pub league_path: Option<String>,
+    pub game_dir: Option<String>,
+    pub void_root: String,
+    pub mod_count: usize,
+    pub enabled_count: usize,
+    pub broken_mods: usize,
+    pub overlay_exists: bool,
+    pub overlay_stale: bool,
+    pub patcher_available: bool,
+    pub patcher_path: Option<String>,
+}
+
+fn scan_dir(dir: &Path) -> (u64, u64, Option<u64>) {
+    let mut files = 0u64;
+    let mut bytes = 0u64;
+    let mut newest: Option<u64> = None;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let entries = match fs::read_dir(&current) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let meta = match entry.metadata() {
+                Ok(meta) => meta,
+                Err(_) => continue,
+            };
+            if meta.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            files += 1;
+            bytes += meta.len();
+            if let Ok(modified) = meta.modified() {
+                if let Ok(dur) = modified.duration_since(std::time::UNIX_EPOCH) {
+                    let ms = dur.as_millis() as u64;
+                    newest = Some(newest.map_or(ms, |current| current.max(ms)));
+                }
+            }
+        }
+    }
+    (files, bytes, newest)
+}
+
+pub fn overlay_status() -> Result<OverlayStatus, String> {
+    let overlay = overlay_dir()?;
+    let enabled = list_enabled_mods()?;
+    let (file_count, total_bytes, last_built_ms) = if overlay.is_dir() {
+        scan_dir(&overlay)
+    } else {
+        (0, 0, None)
+    };
+    let mut stale = file_count == 0 && !enabled.is_empty();
+    if let Some(built) = last_built_ms {
+        for entry in &enabled {
+            let (_, _, newest) = scan_dir(Path::new(&entry.path));
+            if newest.map_or(false, |ms| ms > built) {
+                stale = true;
+                break;
+            }
+        }
+    }
+    Ok(OverlayStatus {
+        exists: file_count > 0,
+        overlay_dir: overlay.to_string_lossy().to_string(),
+        file_count,
+        total_bytes,
+        last_built_ms,
+        stale,
+        enabled_mods: enabled.len(),
+    })
+}
+
+pub fn mods_health() -> Result<Vec<ModHealth>, String> {
+    let mods = read_library()?;
+    let mut out = Vec::with_capacity(mods.len());
+    for entry in mods {
+        let mut issues: Vec<String> = Vec::new();
+        let dir = PathBuf::from(&entry.path);
+        if !dir.is_dir() {
+            issues.push("Mod klasörü bulunamadı".to_string());
+        } else {
+            let (files, _, _) = scan_dir(&dir);
+            if files == 0 {
+                issues.push("Mod klasörü boş".to_string());
+            }
+        }
+        if entry.layers.is_empty() {
+            issues.push("Katman bilgisi yok".to_string());
+        }
+        out.push(ModHealth {
+            healthy: issues.is_empty(),
+            id: entry.id,
+            name: entry.name,
+            enabled: entry.enabled,
+            issues,
+        });
+    }
+    Ok(out)
+}
+
+pub fn diagnostics(app_version: String, patcher_available: bool, patcher_path: Option<String>) -> Diagnostics {
+    let league = crate::detect_league();
+    let game_dir = resolve_game_dir();
+    let mods = read_library().unwrap_or_default();
+    let enabled_count = mods.iter().filter(|m| m.enabled).count();
+    let broken_mods = mods
+        .iter()
+        .filter(|m| !Path::new(&m.path).is_dir())
+        .count();
+    let overlay = overlay_status().unwrap_or_default();
+    Diagnostics {
+        app_version,
+        league_found: league.found,
+        league_path: league.path,
+        game_dir: game_dir.map(|p| p.to_string_lossy().to_string()),
+        void_root: void_root()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        mod_count: mods.len(),
+        enabled_count,
+        broken_mods,
+        overlay_exists: overlay.exists,
+        overlay_stale: overlay.stale,
+        patcher_available,
+        patcher_path,
+    }
 }

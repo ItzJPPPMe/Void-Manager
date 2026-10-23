@@ -17,9 +17,11 @@ import clsx from "clsx";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { useChampionStore } from "@/store/championStore";
 import { useAppStore } from "@/store/appStore";
+import { useSettingsStore } from "@/store/settingsStore";
 import { LazyImage } from "@/components/common/LazyImage";
 import { RARITY_BADGE, SOURCE_BADGE } from "@/lib/skinMeta";
 import { applySkinToLtk, skinPackageUrl } from "@/services/skinActions";
+import { importSkinToVoid } from "@/services/skinTransfer";
 import { downloadToCache, copyFile, ltkImportFile } from "@/services/ltkManager";
 
 export function SkinDetailModal() {
@@ -33,6 +35,7 @@ export function SkinDetailModal() {
   const selectSkin = useChampionStore((s) => s.selectSkin);
   const toggleFavorite = useChampionStore((s) => s.toggleFavorite);
   const markSkinReady = useChampionStore((s) => s.markSkinReady);
+  const sendTarget = useSettingsStore((s) => s.settings.sendTarget);
   const [chromaId, setChromaId] = useState<number | null>(null);
   const [applying, setApplying] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -119,6 +122,30 @@ export function SkinDetailModal() {
           : err instanceof Error
             ? err.message
             : "LTK Manager'a gönderilemedi",
+        "error",
+      );
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleSendToVoid = async () => {
+    if (!packageUrl) return;
+    setApplying(true);
+    try {
+      const mod = await importSkinToVoid(skin, chroma);
+      markSkinReady(skin.id, chroma ? null : packageUrl);
+      showToast(
+        `"${mod.name}" VOID kütüphanesine eklendi ve etkinleştirildi. Modlar sekmesinden yamayı derleyip başlatabilirsin.`,
+        "success",
+      );
+    } catch (err) {
+      showToast(
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+            ? err.message
+            : "VOID Patcher'a eklenemedi",
         "error",
       );
     } finally {
@@ -457,47 +484,60 @@ export function SkinDetailModal() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 border-t border-white/5 px-6 py-4">
+          <div className="space-y-2 border-t border-white/5 px-6 py-4">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setGalleryChampionId(skin.championId)}
+                className="btn-ghost !px-3"
+                title="Şampiyonun tüm kostümleri"
+              >
+                <Images className="h-4 w-4" />
+                Galeri
+              </button>
+              <button
+                onClick={() => void handleDownloadImport()}
+                disabled={!packageUrl || downloading}
+                className={clsx(
+                  "btn-secondary flex-1 !py-2.5",
+                  (!packageUrl || downloading) && "opacity-50",
+                )}
+                title="Paketi diske indir ve LTK kütüphanesine aktar"
+              >
+                <HardDriveDownload className="h-4 w-4" />
+                {downloading
+                  ? "İndiriliyor..."
+                  : !packageUrl
+                    ? "Paket Yok"
+                    : "İndir ve Aktar"}
+              </button>
+            </div>
             <button
-              onClick={() => setGalleryChampionId(skin.championId)}
-              className="btn-ghost !px-3"
-              title="Şampiyonun tüm kostümleri"
-            >
-              <Images className="h-4 w-4" />
-              Galeri
-            </button>
-            <button
-              onClick={() => void handleDownloadImport()}
-              disabled={!packageUrl || downloading}
-              className={clsx(
-                "btn-secondary flex-1 !py-2.5",
-                (!packageUrl || downloading) && "opacity-50",
-              )}
-              title="Paketi diske indir ve LTK kütüphanesine aktar"
-            >
-              <HardDriveDownload className="h-4 w-4" />
-              {downloading
-                ? "İndiriliyor..."
-                : !packageUrl
-                  ? "Paket Yok"
-                  : "İndir ve Aktar"}
-            </button>
-            <button
-              onClick={() => void handleApply()}
+              onClick={() =>
+                void (sendTarget === "void" ? handleSendToVoid() : handleApply())
+              }
               disabled={!packageUrl || applying}
               className={clsx(
-                "btn-primary flex-1 !py-2.5",
+                "btn-primary w-full !py-2.5",
                 (!packageUrl || applying) && "opacity-50",
               )}
+              title={
+                sendTarget === "void"
+                  ? "Paketi VOID kütüphanesine ekle ve etkinleştir"
+                  : "Paketi LTK Manager'a gönder"
+              }
             >
               <Download className="h-4 w-4" />
               {applying
-                ? "Gönderiliyor..."
-                : !ltkStatus?.found
-                  ? "LTK Manager Yok"
-                  : packageUrl
-                    ? "LTK'ya Gönder"
-                    : "Paket Yok"}
+                ? sendTarget === "void"
+                  ? "Ekleniyor..."
+                  : "Gönderiliyor..."
+                : !packageUrl
+                  ? "Paket Yok"
+                  : sendTarget === "void"
+                    ? "VOID Patcher'a Ekle"
+                    : !ltkStatus?.found
+                      ? "LTK Manager Yok"
+                      : "LTK'ya Gönder"}
             </button>
           </div>
         </div>

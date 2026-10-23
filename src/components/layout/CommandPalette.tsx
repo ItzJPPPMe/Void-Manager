@@ -18,6 +18,7 @@ import {
   Dices,
   Palette,
   Bell,
+  Wrench,
 } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
@@ -64,6 +65,7 @@ export function CommandPalette() {
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
   const setRouletteOpen = useAppStore((s) => s.setRouletteOpen);
   const setThemeEditorOpen = useAppStore((s) => s.setThemeEditorOpen);
+  const setSetupOpen = useAppStore((s) => s.setSetupOpen);
   const setNotificationPanelOpen = useNotificationStore((s) => s.setPanelOpen);
   const showToast = useAppStore((s) => s.showToast);
 
@@ -207,6 +209,26 @@ export function CommandPalette() {
         icon: <Sparkles className="h-4 w-4 text-neon-cyan" />,
         run: () => {
           setView("mods");
+          close();
+        },
+      },
+      {
+        key: "act-favorites",
+        group: "Eylemler",
+        label: "Favoriler görünümüne geç",
+        icon: <Heart className="h-4 w-4 text-rose-400" />,
+        run: () => {
+          setView("favorites");
+          close();
+        },
+      },
+      {
+        key: "act-setup",
+        group: "Eylemler",
+        label: "Kurulum ve tanılama",
+        icon: <Wrench className="h-4 w-4 text-neon-lime" />,
+        run: () => {
+          setSetupOpen(true);
           close();
         },
       },
@@ -382,6 +404,7 @@ export function CommandPalette() {
     setRouletteOpen,
     setThemeEditorOpen,
     setNotificationPanelOpen,
+    setSetupOpen,
   ]);
 
   useEffect(() => {

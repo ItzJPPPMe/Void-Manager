@@ -1371,7 +1371,7 @@ async fn get_system_status(app: tauri::AppHandle) -> SystemStatus {
     let cache_size_mb = cache_base(&app)
         .map(|b| dir_size_mb(&b))
         .unwrap_or(0.0);
-    let mod_engine_ready = league.found;
+    let mod_engine_ready = voidmods::resolve_game_dir().is_some();
     SystemStatus {
         league_ready: league.found,
         riot_client_ready: riot.found,
@@ -1839,6 +1839,48 @@ async fn void_mods_build_overlay(
 }
 
 #[tauri::command]
+async fn void_mods_import_for_skin(
+    package_path: String,
+    skin_id: u32,
+) -> Result<voidmods::VoidMod, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        voidmods::import_for_skin(Path::new(&package_path), skin_id)
+    })
+    .await
+    .map_err(|e| format!("İçe aktarma görevi başlatılamadı: {e}"))?
+}
+
+#[tauri::command]
+async fn void_mods_remove_by_skin(skin_id: u32) -> Result<Vec<voidmods::VoidMod>, String> {
+    voidmods::remove_by_skin(skin_id)
+}
+
+#[tauri::command]
+async fn void_mods_set_enabled_many(
+    ids: Vec<String>,
+    enabled: bool,
+) -> Result<Vec<voidmods::VoidMod>, String> {
+    voidmods::set_enabled_many(&ids, enabled)
+}
+
+#[tauri::command]
+async fn void_overlay_status() -> Result<voidmods::OverlayStatus, String> {
+    voidmods::overlay_status()
+}
+
+#[tauri::command]
+async fn void_mods_health() -> Result<Vec<voidmods::ModHealth>, String> {
+    voidmods::mods_health()
+}
+
+#[tauri::command]
+async fn void_diagnostics(app: tauri::AppHandle) -> Result<voidmods::Diagnostics, String> {
+    let version = app.package_info().version.to_string();
+    let status = voidpatcher::status();
+    Ok(voidmods::diagnostics(version, status.available, status.host_path))
+}
+
+#[tauri::command]
 async fn void_patcher_status() -> voidpatcher::PatcherStatus {
     voidpatcher::status()
 }
@@ -1925,6 +1967,12 @@ pub fn run() {
             void_mods_set_enabled,
             void_mods_remove,
             void_mods_build_overlay,
+            void_mods_import_for_skin,
+            void_mods_remove_by_skin,
+            void_mods_set_enabled_many,
+            void_overlay_status,
+            void_mods_health,
+            void_diagnostics,
             void_patcher_status,
             void_patcher_config,
             void_patcher_start,

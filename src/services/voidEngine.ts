@@ -12,6 +12,7 @@ export interface VoidMod {
   tags: string[];
   layers: string[];
   thumbnail: string | null;
+  skinId: number | null;
 }
 
 export interface VoidModsPaths {
@@ -71,6 +72,39 @@ export interface PatcherConfig {
   defaultFlags: number;
 }
 
+export interface OverlayStatus {
+  exists: boolean;
+  overlayDir: string;
+  fileCount: number;
+  totalBytes: number;
+  lastBuiltMs: number | null;
+  stale: boolean;
+  enabledMods: number;
+}
+
+export interface ModHealth {
+  id: string;
+  name: string;
+  enabled: boolean;
+  healthy: boolean;
+  issues: string[];
+}
+
+export interface Diagnostics {
+  appVersion: string;
+  leagueFound: boolean;
+  leaguePath: string | null;
+  gameDir: string | null;
+  voidRoot: string;
+  modCount: number;
+  enabledCount: number;
+  brokenMods: number;
+  overlayExists: boolean;
+  overlayStale: boolean;
+  patcherAvailable: boolean;
+  patcherPath: string | null;
+}
+
 export async function voidModsPaths(): Promise<VoidModsPaths> {
   return invoke<VoidModsPaths>("void_mods_paths");
 }
@@ -96,6 +130,36 @@ export async function voidModsRemove(id: string): Promise<VoidMod[]> {
 
 export async function voidModsBuildOverlay(): Promise<OverlaySummary> {
   return invoke<OverlaySummary>("void_mods_build_overlay");
+}
+
+export async function voidModsImportForSkin(
+  packagePath: string,
+  skinId: number,
+): Promise<VoidMod> {
+  return invoke<VoidMod>("void_mods_import_for_skin", { packagePath, skinId });
+}
+
+export async function voidModsRemoveBySkin(skinId: number): Promise<VoidMod[]> {
+  return invoke<VoidMod[]>("void_mods_remove_by_skin", { skinId });
+}
+
+export async function voidModsSetEnabledMany(
+  ids: string[],
+  enabled: boolean,
+): Promise<VoidMod[]> {
+  return invoke<VoidMod[]>("void_mods_set_enabled_many", { ids, enabled });
+}
+
+export async function voidOverlayStatus(): Promise<OverlayStatus> {
+  return invoke<OverlayStatus>("void_overlay_status");
+}
+
+export async function voidModsHealth(): Promise<ModHealth[]> {
+  return invoke<ModHealth[]>("void_mods_health");
+}
+
+export async function voidDiagnostics(): Promise<Diagnostics> {
+  return invoke<Diagnostics>("void_diagnostics");
 }
 
 export async function voidPatcherStatus(): Promise<PatcherStatus> {

@@ -44,6 +44,7 @@ import type {
   DataSourceMode,
   GridDensity,
   PatchTargetMode,
+  SendTarget,
   SkinNameLanguage,
   ThemeAccent,
 } from "@/types/settings";
@@ -70,6 +71,19 @@ const PATCH_MODES: { id: PatchTargetMode; label: string; hint: string }[] = [
   { id: "fantome", label: "Fantome / LTK", hint: ".fantome paketleri için önerilir" },
   { id: "wad-overlay", label: "WAD Overlay", hint: "WAD dosyalarına bindirme" },
   { id: "cslol-compatible", label: "CSLOL Uyumlu", hint: "cslol-manager ile uyumlu" },
+];
+
+const SEND_TARGETS: { id: SendTarget; label: string; hint: string }[] = [
+  {
+    id: "void",
+    label: "VOID Patcher",
+    hint: "Kostümü VOID kütüphanesine ekler ve etkinleştirir.",
+  },
+  {
+    id: "ltk",
+    label: "LTK Manager",
+    hint: "Kostümü LTK Manager'a gönderir, onayı orada verirsin.",
+  },
 ];
 
 const DATA_SOURCES: { id: DataSourceMode; label: string; hint: string }[] = [
@@ -748,6 +762,42 @@ export function SettingsPanel() {
                   ))}
                 </div>
               </div>
+
+              <div>
+                <p className="mb-1 text-xs text-slate-400">
+                  Kostüm gönderme hedefi
+                </p>
+                <p className="mb-2 text-[11px] text-slate-500">
+                  Kostüm detayındaki ana butonun hangi yamalayıcıya göndereceğini
+                  belirler.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {SEND_TARGETS.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => update({ sendTarget: t.id })}
+                      className={clsx(
+                        "flex flex-col items-start gap-1 rounded-xl border px-4 py-3 text-left transition",
+                        settings.sendTarget === t.id
+                          ? "border-neon-cyan/50 bg-neon-cyan/10"
+                          : "border-white/10 bg-white/[0.02] hover:border-white/20",
+                      )}
+                    >
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <p className="font-display text-sm font-semibold">
+                          {t.label}
+                        </p>
+                        {settings.sendTarget === t.id && (
+                          <span className="chip border-neon-cyan/50 text-neon-cyan">
+                            Seçili
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400">{t.hint}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -912,6 +962,24 @@ export function SettingsPanel() {
                   checked={settings.bulkModOperations}
                   onChange={(e) =>
                     update({ bulkModOperations: e.target.checked })
+                  }
+                  className="h-4 w-4 accent-cyan-400"
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Oyun açılınca otomatik yama</p>
+                  <p className="text-xs text-slate-400">
+                    LoL istemcisi algılandığında overlay eskimişse yeniden derler
+                    ve VOID Patcher'ı başlatır.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.autoPatchOnGameLaunch}
+                  onChange={(e) =>
+                    update({ autoPatchOnGameLaunch: e.target.checked })
                   }
                   className="h-4 w-4 accent-cyan-400"
                 />

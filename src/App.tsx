@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { TitleBar } from "@/components/layout/TitleBar";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -7,24 +7,76 @@ import { BootScreen } from "@/components/layout/BootScreen";
 import { NotificationCenter } from "@/components/layout/NotificationCenter";
 import { ChampionWorkspace } from "@/components/champion/ChampionWorkspace";
 import { ModsView } from "@/components/mods/ModsView";
+import { FavoritesView } from "@/components/favorites/FavoritesView";
 import { SelectedSkinPanel } from "@/components/panel/SelectedSkinPanel";
-import { SettingsPanel } from "@/components/settings/SettingsPanel";
-import { CommandPalette } from "@/components/layout/CommandPalette";
-import { SkinDetailModal } from "@/components/skins/SkinDetailModal";
-import { ChampionGalleryModal } from "@/components/skins/ChampionGalleryModal";
-import { StatsModal } from "@/components/modals/StatsModal";
-import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
-import { ThemeEditor } from "@/components/modals/ThemeEditor";
-import { DashboardModal } from "@/components/modals/DashboardModal";
-import { RouletteModal } from "@/components/modals/RouletteModal";
-import { CinematicModal } from "@/components/modals/CinematicModal";
-import { LibraryExplorerModal } from "@/components/modals/LibraryExplorerModal";
 import { Toast } from "@/components/layout/Toast";
+
+const SettingsPanel = lazy(() =>
+  import("@/components/settings/SettingsPanel").then((m) => ({
+    default: m.SettingsPanel,
+  })),
+);
+const CommandPalette = lazy(() =>
+  import("@/components/layout/CommandPalette").then((m) => ({
+    default: m.CommandPalette,
+  })),
+);
+const SkinDetailModal = lazy(() =>
+  import("@/components/skins/SkinDetailModal").then((m) => ({
+    default: m.SkinDetailModal,
+  })),
+);
+const ChampionGalleryModal = lazy(() =>
+  import("@/components/skins/ChampionGalleryModal").then((m) => ({
+    default: m.ChampionGalleryModal,
+  })),
+);
+const StatsModal = lazy(() =>
+  import("@/components/modals/StatsModal").then((m) => ({
+    default: m.StatsModal,
+  })),
+);
+const ShortcutsModal = lazy(() =>
+  import("@/components/modals/ShortcutsModal").then((m) => ({
+    default: m.ShortcutsModal,
+  })),
+);
+const ThemeEditor = lazy(() =>
+  import("@/components/modals/ThemeEditor").then((m) => ({
+    default: m.ThemeEditor,
+  })),
+);
+const DashboardModal = lazy(() =>
+  import("@/components/modals/DashboardModal").then((m) => ({
+    default: m.DashboardModal,
+  })),
+);
+const RouletteModal = lazy(() =>
+  import("@/components/modals/RouletteModal").then((m) => ({
+    default: m.RouletteModal,
+  })),
+);
+const CinematicModal = lazy(() =>
+  import("@/components/modals/CinematicModal").then((m) => ({
+    default: m.CinematicModal,
+  })),
+);
+const LibraryExplorerModal = lazy(() =>
+  import("@/components/modals/LibraryExplorerModal").then((m) => ({
+    default: m.LibraryExplorerModal,
+  })),
+);
+const SetupWizard = lazy(() =>
+  import("@/components/modals/SetupWizard").then((m) => ({
+    default: m.SetupWizard,
+  })),
+);
 import { useAppStore } from "@/store/appStore";
 import { useChampionStore } from "@/store/championStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useRepositories } from "@/hooks/useRepositories";
+import { useAutoPatch } from "@/hooks/useAutoPatch";
 import { checkForUpdate } from "@/services/updateService";
 import { applyTheme } from "@/lib/theme";
 
@@ -36,6 +88,7 @@ export default function App() {
   const rouletteOpen = useAppStore((s) => s.rouletteOpen);
   const themeEditorOpen = useAppStore((s) => s.themeEditorOpen);
   const libraryExplorerOpen = useAppStore((s) => s.libraryExplorerOpen);
+  const setupOpen = useAppStore((s) => s.setupOpen);
   const view = useAppStore((s) => s.view);
   const setSystemStatus = useAppStore((s) => s.setSystemStatus);
   const refreshLtk = useAppStore((s) => s.refreshLtk);
@@ -47,9 +100,20 @@ export default function App() {
   const checkUpdateOnLaunch = useSettingsStore(
     (s) => s.settings.checkUpdateOnLaunch,
   );
+  const autoPatchOnGameLaunch = useSettingsStore(
+    (s) => s.settings.autoPatchOnGameLaunch,
+  );
+  const setupCompleted = useSettingsStore((s) => s.settings.setupCompleted);
   const setNotificationPanelOpen = useNotificationStore((s) => s.setPanelOpen);
   const { sync } = useRepositories();
   const [booted, setBooted] = useState(false);
+  useAutoPatch(autoPatchOnGameLaunch);
+
+  useEffect(() => {
+    if (setupCompleted) return;
+    const timer = setTimeout(() => useAppStore.getState().setSetupOpen(true), 1200);
+    return () => clearTimeout(timer);
+  }, [setupCompleted]);
 
   useEffect(() => {
     applyTheme(settings);
@@ -93,9 +157,11 @@ export default function App() {
         app.setThemeEditorOpen(true);
         return;
       }
-      if (mod && (e.key === "1" || e.key === "2")) {
+      if (mod && (e.key === "1" || e.key === "2" || e.key === "3")) {
         e.preventDefault();
-        app.setView(e.key === "1" ? "skins" : "mods");
+        app.setView(
+          e.key === "1" ? "skins" : e.key === "2" ? "mods" : "favorites",
+        );
         return;
       }
       if (typing || mod || e.altKey) return;
@@ -108,6 +174,7 @@ export default function App() {
         app.rouletteOpen ||
         app.themeEditorOpen ||
         app.libraryExplorerOpen ||
+        app.setupOpen ||
         app.cinematicSkinId !== null ||
         app.galleryChampionId !== null ||
         app.detailSkinId !== null;
@@ -195,23 +262,32 @@ export default function App() {
         <Sidebar />
         <main className="relative z-10 flex min-w-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1">
-            {view === "mods" ? <ModsView /> : <ChampionWorkspace />}
+            {view === "mods" ? (
+              <ModsView />
+            ) : view === "favorites" ? (
+              <FavoritesView />
+            ) : (
+              <ChampionWorkspace />
+            )}
           </div>
           {view === "skins" && <SelectedSkinPanel />}
           <StatusBar />
         </main>
       </div>
-      {settingsOpen && <SettingsPanel />}
-      <CommandPalette />
-      <SkinDetailModal />
-      <ChampionGalleryModal />
-      {statsOpen && <StatsModal />}
-      {shortcutsOpen && <ShortcutsModal />}
-      {dashboardOpen && <DashboardModal />}
-      {rouletteOpen && <RouletteModal />}
-      {themeEditorOpen && <ThemeEditor />}
-      {libraryExplorerOpen && <LibraryExplorerModal />}
-      <CinematicModal />
+      <Suspense fallback={null}>
+        {settingsOpen && <SettingsPanel />}
+        <CommandPalette />
+        <SkinDetailModal />
+        <ChampionGalleryModal />
+        {statsOpen && <StatsModal />}
+        {shortcutsOpen && <ShortcutsModal />}
+        {dashboardOpen && <DashboardModal />}
+        {rouletteOpen && <RouletteModal />}
+        {themeEditorOpen && <ThemeEditor />}
+        {libraryExplorerOpen && <LibraryExplorerModal />}
+        {setupOpen && <SetupWizard />}
+        <CinematicModal />
+      </Suspense>
       <NotificationCenter />
       <Toast />
       <BootScreen done={booted} />

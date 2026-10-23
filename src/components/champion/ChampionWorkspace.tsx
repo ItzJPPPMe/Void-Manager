@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Search,
   X,
@@ -13,6 +13,10 @@ import {
   Dices,
   BarChart3,
   Download,
+  PackagePlus,
+  PackageMinus,
+  Hammer,
+  Send,
 } from "lucide-react";
 import clsx from "clsx";
 import { useChampionStore } from "@/store/championStore";
@@ -25,6 +29,13 @@ import { VirtualSkinGrid } from "@/components/skins/VirtualSkinGrid";
 import { SkinSuggestions } from "@/components/skins/SkinSuggestions";
 import { RARITY_BADGE, rarityRank } from "@/lib/skinMeta";
 import { fuzzyRank, normalizeTr } from "@/lib/fuzzySearch";
+import { applySkinToLtk } from "@/services/skinActions";
+import { importSkinsToVoid } from "@/services/skinTransfer";
+import {
+  voidModsBuildOverlay,
+  voidModsList,
+  voidModsRemoveBySkin,
+} from "@/services/voidEngine";
 import type { SkinFilter } from "@/types/champion";
 
 const FILTERS: { id: SkinFilter; label: string }[] = [
@@ -58,6 +69,7 @@ export function ChampionWorkspace() {
   const selectChampion = useChampionStore((s) => s.selectChampion);
   const selectSkin = useChampionStore((s) => s.selectSkin);
   const skins = useChampionStore((s) => s.skins);
+  const loading = useChampionStore((s) => s.loading);
   const searchQuery = useChampionStore((s) => s.searchQuery);
   const setSearchQuery = useChampionStore((s) => s.setSearchQuery);
   const activeFilter = useChampionStore((s) => s.activeFilter);
@@ -74,13 +86,22 @@ export function ChampionWorkspace() {
   const setRouletteOpen = useAppStore((s) => s.setRouletteOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
   const showToast = useAppStore((s) => s.showToast);
+  const ltkStatus = useAppStore((s) => s.ltkStatus);
+  const refreshLtk = useAppStore((s) => s.refreshLtk);
   const favorites = useCollectionStore((s) => s.favorites);
   const toggleFavorite = useChampionStore((s) => s.toggleFavorite);
+  const markSkinReady = useChampionStore((s) => s.markSkinReady);
   const fuzzyEnabled = useSettingsStore((s) => s.settings.fuzzySearch);
+  const sendTarget = useSettingsStore((s) => s.settings.sendTarget);
   const selectionActive = useSelectionStore((s) => s.active);
   const setSelectionActive = useSelectionStore((s) => s.setActive);
   const selectedIds = useSelectionStore((s) => s.ids);
   const clearSelection = useSelectionStore((s) => s.clear);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const champion = useMemo(
     () => champions.find((c) => c.id === selectedChampionId) ?? null,
@@ -218,6 +239,135 @@ export function ChampionWorkspace() {
     showToast(`${removed} kostüm favorilerden çıkarıldı`, "info");
     clearSelection();
     setSelectionActive(false);
+  };
+
+  const describeError = (err: unknown, fallback: string) =>
+    typeof err === "string"
+      ? err
+      : err instanceof Error
+        ? err.message
+        : fallback;
+
+  const finishBulk = () => {
+    setBulkBusy(false);
+    setBulkProgress(null);
+    clearSelection();
+    setSelectionActive(false);
+  };
+
+  const bulkSendToVoid = async () => {
+    const targets = skins.filter(
+      (s) => selectedIds.includes(s.id) && Boolean(s.packageUrl),
+    );
+    if (targets.length === 0) {
+      showToast("Seçilen kostümlerde mod paketi yok", "error");
+      return;
+    }
+    setBulkBusy(true);
+    setBulkProgress({ done: 0, total: targets.length });
+    try {
+      const { added, failed } = await importSkinsToVoid(targets, (done, total) =>
+        setBulkProgress({ done, total }),
+      );
+      for (const mod of added) {
+        if (mod.skinId !== null) markSkinReady(mod.skinId, null);
+      }
+      if (added.length > 0) {
+        showToast(
+          `${added.length} kostüm VOID kütüphanesine eklendi`,
+          "success",
+        );
+      }
+      if (failed.length > 0) {
+        showToast(`${failed.length} kostüm eklenemedi`, "error");
+      }
+      if (added.length > 0) {
+        try {
+          const summary = await voidModsBuildOverlay();
+          showToast(
+            `Overlay derlendi: ${summary.built.length} WAD`,
+            "success",
+          );
+        } catch (err) {
+          showToast(describeError(err, "Overlay derlenemedi"), "error");
+        }
+      }
+    } finally {
+      finishBulk();
+    }
+  };
+
+  const bulkSendToLtk = async () => {
+    const targets = skins.filter(
+      (s) => selectedIds.includes(s.id) && Boolean(s.packageUrl),
+    );
+    if (targets.length === 0) {
+      showToast("Seçilen kostümlerde mod paketi yok", "error");
+      return;
+    }
+    setBulkBusy(true);
+    setBulkProgress({ done: 0, total: targets.length });
+    try {
+      const status = ltkStatus ?? (await refreshLtk());
+      if (!status?.found) {
+        showToast("LTK Manager bulunamadı", "error");
+        return;
+      }
+      let sent = 0;
+      let failed = 0;
+      for (const skin of targets) {
+        try {
+          await applySkinToLtk(skin, null);
+          sent += 1;
+        } catch {
+          failed += 1;
+        }
+        setBulkProgress((p) =>
+          p ? { done: p.done + 1, total: p.total } : null,
+        );
+      }
+      if (sent > 0) {
+        showToast(`${sent} kostüm LTK Manager'a gönderildi`, "success");
+      }
+      if (failed > 0) {
+        showToast(`${failed} kostüm gönderilemedi`, "error");
+      }
+    } finally {
+      finishBulk();
+    }
+  };
+
+  const bulkBuildOverlay = async () => {
+    setBulkBusy(true);
+    try {
+      const summary = await voidModsBuildOverlay();
+      showToast(
+        `Overlay derlendi: ${summary.built.length} WAD, ${summary.buildTimeMs} ms`,
+        "success",
+      );
+    } catch (err) {
+      showToast(describeError(err, "Overlay derlenemedi"), "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkRemoveVoid = async () => {
+    setBulkBusy(true);
+    try {
+      const before = (await voidModsList()).length;
+      for (const id of selectedIds) {
+        await voidModsRemoveBySkin(id);
+      }
+      const after = (await voidModsList()).length;
+      showToast(`${before - after} VOID modu kaldırıldı`, "info");
+      clearSelection();
+      setSelectionActive(false);
+    } catch (err) {
+      showToast(describeError(err, "VOID modları kaldırılamadı"), "error");
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   const emptyState = (
@@ -450,6 +600,45 @@ export function ChampionWorkspace() {
             >
               <Download className="h-3.5 w-3.5" /> Detayı aç
             </button>
+            {sendTarget === "void" ? (
+              <button
+                onClick={() => void bulkSendToVoid()}
+                disabled={selectedIds.length === 0 || bulkBusy}
+                className="btn-ghost !py-1 !text-[11px] text-neon-cyan disabled:opacity-40"
+              >
+                <PackagePlus className="h-3.5 w-3.5" /> VOID'e Ekle
+              </button>
+            ) : (
+              <button
+                onClick={() => void bulkSendToLtk()}
+                disabled={selectedIds.length === 0 || bulkBusy}
+                className="btn-ghost !py-1 !text-[11px] text-neon-cyan disabled:opacity-40"
+              >
+                <Send className="h-3.5 w-3.5" /> LTK'ya Gönder
+              </button>
+            )}
+            <button
+              onClick={() => void bulkBuildOverlay()}
+              disabled={bulkBusy}
+              className="btn-ghost !py-1 !text-[11px] text-neon-violet disabled:opacity-40"
+              title="Etkin VOID modlarından overlay derle"
+            >
+              <Hammer className="h-3.5 w-3.5" /> Overlay Derle
+            </button>
+            <button
+              onClick={() => void bulkRemoveVoid()}
+              disabled={selectedIds.length === 0 || bulkBusy}
+              className="btn-ghost !py-1 !text-[11px] text-rose-300 disabled:opacity-40"
+              title="Seçili kostümlerin VOID modlarını kaldır"
+            >
+              <PackageMinus className="h-3.5 w-3.5" /> VOID'den Çıkar
+            </button>
+            {bulkProgress && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-2.5 py-1 font-mono text-[10px] text-slate-300">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-neon-cyan" />
+                {bulkProgress.done}/{bulkProgress.total}
+              </span>
+            )}
             <button
               onClick={() => {
                 clearSelection();
@@ -466,7 +655,11 @@ export function ChampionWorkspace() {
       <SkinSuggestions />
 
       <div className="min-h-0 flex-1">
-        <VirtualSkinGrid skins={filteredSkins} emptyState={emptyState} />
+        <VirtualSkinGrid
+          skins={filteredSkins}
+          emptyState={emptyState}
+          loading={loading && filteredSkins.length === 0}
+        />
       </div>
     </section>
   );

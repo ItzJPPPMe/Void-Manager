@@ -8,7 +8,7 @@ import type {
 import { ltkManagerStatus, ltkPatcherConfig, ltkLibrary } from "@/services/ltkManager";
 import { useNotificationStore } from "@/store/notificationStore";
 
-type AppView = "skins" | "mods";
+type AppView = "skins" | "mods" | "favorites";
 
 export interface UpdateInfo {
   latest: string;
@@ -36,6 +36,7 @@ interface AppStore {
   rouletteOpen: boolean;
   themeEditorOpen: boolean;
   libraryExplorerOpen: boolean;
+  setupOpen: boolean;
   updateInfo: UpdateInfo | null;
   toast: { message: string; type: "success" | "error" | "info" } | null;
   setView: (v: AppView) => void;
@@ -57,6 +58,7 @@ interface AppStore {
   setRouletteOpen: (v: boolean) => void;
   setThemeEditorOpen: (v: boolean) => void;
   setLibraryExplorerOpen: (v: boolean) => void;
+  setSetupOpen: (v: boolean) => void;
   setUpdateInfo: (u: UpdateInfo | null) => void;
   showToast: (message: string, type?: "success" | "error" | "info") => void;
   notify: (
@@ -89,6 +91,7 @@ export const useAppStore = create<AppStore>((set) => ({
   rouletteOpen: false,
   themeEditorOpen: false,
   libraryExplorerOpen: false,
+  setupOpen: false,
   updateInfo: null,
   toast: null,
   setView: (view) => set({ view }),
@@ -138,6 +141,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setThemeEditorOpen: (themeEditorOpen) => set({ themeEditorOpen }),
   setLibraryExplorerOpen: (libraryExplorerOpen) =>
     set({ libraryExplorerOpen }),
+  setSetupOpen: (setupOpen) => set({ setupOpen }),
   setUpdateInfo: (updateInfo) => set({ updateInfo }),
   showToast: (message, type = "info") => {
     if (toastTimer) clearTimeout(toastTimer);
